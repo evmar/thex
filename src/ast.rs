@@ -109,7 +109,7 @@ impl Expr {
         use iced_x86::OpKind::*;
         match instr.op_kind(op) {
             Immediate8 => Expr::Val(instr.immediate8() as u32),
-            NearBranch32 => Expr::Val(instr.immediate8() as u32),
+            NearBranch32 => Expr::Val(instr.near_branch32()),
             Register => Expr::Var(var_from_iced(instr, op)),
             Memory => Self::from_memory(instr),
             k => todo!("{k:?}"),
