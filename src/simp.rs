@@ -93,9 +93,8 @@ mod tests {
     fn simp(instrs: &[iced_x86::Instruction]) -> String {
         let stmts = instrs
             .into_iter()
-            .enumerate()
-            .map(|(i, instr)| Stmt {
-                instr: i,
+            .map(|instr| Stmt {
+                ip: instr.ip32(),
                 kind: StmtKind::from(instr),
             })
             .collect::<Vec<_>>();

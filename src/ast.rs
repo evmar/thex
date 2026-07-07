@@ -118,13 +118,13 @@ impl Expr {
 }
 
 pub struct Stmt {
-    pub instr: usize,
+    pub ip: u32,
     pub kind: StmtKind,
 }
 
 impl std::fmt::Display for Stmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}  ; {}", self.kind, self.instr)
+        write!(f, "{:08x} {}", self.ip, self.kind)
     }
 }
 

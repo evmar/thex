@@ -25,17 +25,19 @@ fn print_assembly(snippet: &Snippet) {
 
     let stmts: Vec<Stmt> = instrs
         .into_iter()
-        .enumerate()
-        .map(|(i, instr)| Stmt {
-            instr: i,
+        .map(|instr| Stmt {
+            ip: instr.ip32(),
             kind: StmtKind::from(&instr),
         })
         .collect();
     let stmts = simp(stmts);
-    let stmts = ssa::ssa(stmts);
-    for stmt in stmts {
-        //println!("{:08X}  {}", instr.ip(), instr);
-        println!("  {}", stmt);
+    let blocks = ssa::ssa(stmts);
+    for block in &blocks {
+        println!("{:x}:", block.ip);
+        for stmt in &block.stmts {
+            println!("  {}", stmt);
+        }
+        println!();
     }
 }
 
