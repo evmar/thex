@@ -9,16 +9,19 @@ fn var_from_iced(instr: &iced_x86::Instruction, op: u32) -> Var {
 }
 
 #[derive(Clone)]
-pub struct BinOp {
-    op: char,
-    left: Box<Expr>,
-    right: Box<Expr>,
+pub struct Call {
+    func: String,
+    args: Vec<Expr>,
 }
 
-impl std::fmt::Display for BinOp {
+impl std::fmt::Display for Call {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let BinOp { op, left, right } = self;
-        write!(f, "({op} {left} {right})",)
+        let Call { func, args } = self;
+        write!(f, "({func}")?;
+        for arg in args.iter() {
+            write!(f, " {arg}")?;
+        }
+        write!(f, ")")
     }
 }
 
@@ -26,7 +29,7 @@ impl std::fmt::Display for BinOp {
 pub enum Expr {
     Val(u32),
     Var(Var),
-    BinOp(BinOp),
+    Call(Box<Call>),
     Todo(String),
 }
 
@@ -35,7 +38,7 @@ impl std::fmt::Display for Expr {
         match self {
             Expr::Val(val) => write!(f, "{val:#x}"),
             Expr::Var(var) => write!(f, "{var}"),
-            Expr::BinOp(op) => write!(f, "{op}"),
+            Expr::Call(op) => write!(f, "{op}"),
             Expr::Todo(msg) => write!(f, "(todo {msg:?})"),
         }
     }
@@ -53,14 +56,62 @@ impl From<String> for Expr {
     }
 }
 
+impl From<iced_x86::Register> for Expr {
+    fn from(reg: iced_x86::Register) -> Self {
+        format!("{reg:?}").to_ascii_lowercase().into()
+    }
+}
+
+impl From<Call> for Expr {
+    fn from(value: Call) -> Self {
+        Expr::Call(Box::new(value))
+    }
+}
+
 impl Expr {
+    fn from_memory(instr: &iced_x86::Instruction) -> Self {
+        let mut args = Vec::new();
+        match instr.memory_segment() {
+            iced_x86::Register::CS | iced_x86::Register::DS | iced_x86::Register::SS => {}
+            r @ iced_x86::Register::FS => args.push(Expr::from(r)),
+            iced_x86::Register::None => {}
+            r => todo!("{r:?}"),
+        }
+
+        match instr.memory_base() {
+            iced_x86::Register::None => {}
+            r => args.push(Expr::from(r)),
+        }
+
+        if instr.memory_index() != iced_x86::Register::None {
+            let mut expr = Expr::from(instr.memory_index());
+            if instr.memory_index_scale() != 1 {
+                expr = Expr::Call(Box::new(Call {
+                    func: "*".into(),
+                    args: vec![expr, Expr::Val(instr.memory_index_scale())],
+                }));
+            }
+            args.push(expr);
+        }
+
+        let offset = instr.memory_displacement32();
+        if offset != 0 {
+            args.push(Expr::Val(offset));
+        }
+
+        Expr::Call(Box::new(Call {
+            func: "mem".into(),
+            args,
+        }))
+    }
+
     fn from_iced(instr: &iced_x86::Instruction, op: u32) -> Self {
         use iced_x86::OpKind::*;
         match instr.op_kind(op) {
             Immediate8 => Expr::Val(instr.immediate8() as u32),
             NearBranch32 => Expr::Val(instr.immediate8() as u32),
             Register => Expr::Var(var_from_iced(instr, op)),
-            Memory => Expr::Todo(format!("mem {instr}")),
+            Memory => Self::from_memory(instr),
             k => todo!("{k:?}"),
         }
     }
@@ -92,41 +143,40 @@ impl Stmt {
             }
             Inc => {
                 let expr = Expr::from_iced(instr, 0);
-                let bin = BinOp {
-                    op: '+',
-                    left: Box::new(expr.clone()),
-                    right: Box::new(Expr::Val(1)),
+                let bin = super::Call {
+                    func: "+".into(),
+                    args: vec![expr.clone(), Expr::Val(1)],
                 };
-                Stmt::Set(expr, Expr::BinOp(bin))
+                Stmt::Set(expr, Expr::from(bin))
             }
             Cmp | Test => {
                 let left = Expr::from_iced(instr, 0);
                 let right = Expr::from_iced(instr, 1);
-                let op = match mnemonic {
+                let func = match mnemonic {
                     Cmp => '-',
                     Test => '&',
                     _ => unreachable!(),
+                }
+                .into();
+                let bin = super::Call {
+                    func,
+                    args: vec![left, right],
                 };
-                let bin = BinOp {
-                    op,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                };
-                Stmt::Set(Expr::Var("_".into()), Expr::BinOp(bin))
+                Stmt::Set(Expr::from("_".to_owned()), Expr::from(bin))
             }
             Xor => {
                 let left = Expr::from_iced(instr, 0);
                 let right = Expr::from_iced(instr, 1);
-                let op = match mnemonic {
+                let func = match mnemonic {
                     Xor => '^',
                     _ => unreachable!(),
+                }
+                .into();
+                let bin = super::Call {
+                    func,
+                    args: vec![left.clone(), right],
                 };
-                let bin = BinOp {
-                    op,
-                    left: Box::new(left.clone()),
-                    right: Box::new(right),
-                };
-                Stmt::Set(left, Expr::BinOp(bin))
+                Stmt::Set(left, Expr::from(bin))
             }
             Je | Jne => {
                 let cond = format!("{mnemonic:?}").to_ascii_lowercase();
