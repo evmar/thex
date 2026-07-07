@@ -17,10 +17,7 @@ fn print_assembly(snippet: &Snippet) {
         DecoderOptions::NONE,
     );
 
-    let stmts: Vec<Stmt> = decoder
-        .into_iter()
-        .map(|instr| Stmt::from_iced(&instr))
-        .collect();
+    let stmts: Vec<Stmt> = decoder.into_iter().map(|i| Stmt::from(&i)).collect();
     let stmts = simp(stmts);
     for stmt in stmts {
         //println!("{:08X}  {}", instr.ip(), instr);

@@ -25,3 +25,32 @@ pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn simp(instrs: &[iced_x86::Instruction]) -> String {
+        let stmts = instrs.into_iter().map(Stmt::from).collect::<Vec<_>>();
+        let stmts = super::simp(stmts);
+        stmts
+            .into_iter()
+            .map(|i| format!("{i}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn xor() -> anyhow::Result<()> {
+        // assemble xor(eax, eax)
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(32)?;
+        a.xor(eax, ebx)?;
+        a.xor(ebx, ebx)?;
+        insta::assert_snapshot!(simp(a.instructions()), @"
+        (set eax (^ eax ebx))
+        (set ebx 0x0)
+        ");
+        Ok(())
+    }
+}

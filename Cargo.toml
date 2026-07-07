@@ -4,4 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-iced-x86 = "1.21.0"
+anyhow = "1.0.103"
+
+[dependencies.iced-x86]
+version = "1.21.0"
+features = ["code_asm"]
+
+[dev-dependencies]
+insta = "1.48.0"
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3

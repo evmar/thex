@@ -131,8 +131,8 @@ impl std::fmt::Display for Stmt {
     }
 }
 
-impl Stmt {
-    pub fn from_iced(instr: &iced_x86::Instruction) -> Self {
+impl From<&iced_x86::Instruction> for Stmt {
+    fn from(instr: &iced_x86::Instruction) -> Self {
         use iced_x86::Mnemonic::*;
         let mnemonic = instr.mnemonic();
         match mnemonic {
