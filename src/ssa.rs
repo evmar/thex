@@ -1,4 +1,4 @@
-use crate::ast::Stmt;
+use crate::ast::{Stmt, StmtKind};
 
 struct Block {
     stmts: Vec<Stmt>,
@@ -9,7 +9,7 @@ fn blocks(stmts: Vec<Stmt>) -> Vec<Block> {
     let mut block_stmts: Vec<Stmt> = vec![];
     for stmt in stmts {
         let stmt = block_stmts.push_mut(stmt);
-        if let Stmt::Jmp(_, _) = &stmt {
+        if let StmtKind::Jmp(_, _) = &stmt.kind {
             blocks.push(Block { stmts: block_stmts });
             block_stmts = vec![];
         }

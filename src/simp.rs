@@ -1,8 +1,8 @@
-use crate::ast::{Call, Expr, Stmt};
+use crate::ast::{Call, Expr, Stmt, StmtKind};
 
 /// Simplify `xor eax, eax` => setting eax to 0.
-fn xor(stmt: &Stmt) -> Option<Stmt> {
-    let Stmt::Set(left, Expr::Call(call)) = stmt else {
+fn xor(stmt: &StmtKind) -> Option<StmtKind> {
+    let StmtKind::Set(left, Expr::Call(call)) = stmt else {
         return None;
     };
     let "^" = call.func.as_str() else { return None };
@@ -12,13 +12,13 @@ fn xor(stmt: &Stmt) -> Option<Stmt> {
     if left != arg1 || left != arg2 {
         return None;
     }
-    Some(Stmt::Set(left.clone(), 0.into()))
+    Some(StmtKind::Set(left.clone(), 0.into()))
 }
 
 /// Simplify a test followed by je.
-fn test_je(stmts: (&Stmt, &Stmt)) -> Option<Stmt> {
+fn test_je(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
     // First stmt looks like (set _ (- expr var))
-    let Stmt::Set(left, expr) = stmts.0 else {
+    let StmtKind::Set(left, expr) = stmts.0 else {
         return None;
     };
     let Expr::Var(var) = left else { return None };
@@ -29,7 +29,7 @@ fn test_je(stmts: (&Stmt, &Stmt)) -> Option<Stmt> {
     let test = call.func.as_str();
     let args = call.args.as_slice();
 
-    let Stmt::Jmp(cond, dst) = stmts.1 else {
+    let StmtKind::Jmp(cond, dst) = stmts.1 else {
         return None;
     };
     let Expr::Call(call) = cond else {
@@ -58,24 +58,24 @@ fn test_je(stmts: (&Stmt, &Stmt)) -> Option<Stmt> {
         _ => return None,
     };
 
-    Some(Stmt::Jmp(cond.into(), dst.clone()))
+    Some(StmtKind::Jmp(cond.into(), dst.clone()))
 }
 
 pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
     let mut stmts = stmts;
     let mut i = 0;
     while i < stmts.len() {
-        let stmt = &stmts[i];
-        if let Some(s) = xor(stmt) {
-            stmts[i] = s;
+        let stmt = &stmts[i].kind;
+        if let Some(s) = xor(&stmt) {
+            stmts[i].kind = s;
             continue;
         }
 
         if i + 1 < stmts.len() {
-            let next = &stmts[i + 1];
+            let next = &stmts[i + 1].kind;
             if let Some(s) = test_je((&stmt, &next)) {
                 stmts.remove(i);
-                stmts[i] = s;
+                stmts[i].kind = s;
                 continue;
             }
         }
@@ -91,7 +91,14 @@ mod tests {
     use super::*;
 
     fn simp(instrs: &[iced_x86::Instruction]) -> String {
-        let stmts = instrs.into_iter().map(Stmt::from).collect::<Vec<_>>();
+        let stmts = instrs
+            .into_iter()
+            .enumerate()
+            .map(|(i, instr)| Stmt {
+                instr: i,
+                kind: StmtKind::from(instr),
+            })
+            .collect::<Vec<_>>();
         let stmts = super::simp(stmts);
         stmts
             .into_iter()

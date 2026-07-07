@@ -117,21 +117,32 @@ impl Expr {
     }
 }
 
-pub enum Stmt {
-    Set(Expr, Expr),
-    Jmp(Expr, Expr),
+pub struct Stmt {
+    pub instr: usize,
+    pub kind: StmtKind,
 }
 
 impl std::fmt::Display for Stmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}  ; {}", self.kind, self.instr)
+    }
+}
+
+pub enum StmtKind {
+    Set(Expr, Expr),
+    Jmp(Expr, Expr),
+}
+
+impl std::fmt::Display for StmtKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Stmt::Set(var, expr) => write!(f, "(set {var} {expr})"),
-            Stmt::Jmp(cond, addr) => write!(f, "(jmp {cond} {addr})"),
+            StmtKind::Set(var, expr) => write!(f, "(set {var} {expr})"),
+            StmtKind::Jmp(cond, addr) => write!(f, "(jmp {cond} {addr})"),
         }
     }
 }
 
-impl From<&iced_x86::Instruction> for Stmt {
+impl From<&iced_x86::Instruction> for StmtKind {
     fn from(instr: &iced_x86::Instruction) -> Self {
         use iced_x86::Mnemonic::*;
         let mnemonic = instr.mnemonic();
@@ -139,7 +150,7 @@ impl From<&iced_x86::Instruction> for Stmt {
             Mov => {
                 let var = Expr::from_iced(instr, 0);
                 let expr = Expr::from_iced(instr, 1);
-                Stmt::Set(var, expr)
+                StmtKind::Set(var, expr)
             }
             Inc => {
                 let expr = Expr::from_iced(instr, 0);
@@ -147,7 +158,7 @@ impl From<&iced_x86::Instruction> for Stmt {
                     func: "+".into(),
                     args: vec![expr.clone(), Expr::Val(1)],
                 };
-                Stmt::Set(expr, Expr::from(bin))
+                StmtKind::Set(expr, Expr::from(bin))
             }
             Cmp | Test => {
                 let left = Expr::from_iced(instr, 0);
@@ -162,7 +173,7 @@ impl From<&iced_x86::Instruction> for Stmt {
                     func,
                     args: vec![left, right],
                 };
-                Stmt::Set(Expr::from("_".to_owned()), Expr::from(bin))
+                StmtKind::Set(Expr::from("_".to_owned()), Expr::from(bin))
             }
             Xor => {
                 let left = Expr::from_iced(instr, 0);
@@ -176,7 +187,7 @@ impl From<&iced_x86::Instruction> for Stmt {
                     func,
                     args: vec![left.clone(), right],
                 };
-                Stmt::Set(left, Expr::from(bin))
+                StmtKind::Set(left, Expr::from(bin))
             }
             Je | Jne => {
                 let cond = Expr::from(super::Call {
@@ -184,11 +195,11 @@ impl From<&iced_x86::Instruction> for Stmt {
                     args: vec![],
                 });
                 let dst = Expr::from_iced(instr, 0);
-                Stmt::Jmp(cond, dst)
+                StmtKind::Jmp(cond, dst)
             }
             Ret => {
                 let dst = Expr::Todo("stack ref".into());
-                Stmt::Jmp(Expr::from("_".to_string()), dst)
+                StmtKind::Jmp(Expr::from("_".to_string()), dst)
             }
             m => todo!("{m:?} in {instr}"),
         }

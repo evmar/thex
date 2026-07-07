@@ -23,7 +23,14 @@ fn print_assembly(snippet: &Snippet) {
         println!("{:08X}  {}", instr.ip(), instr);
     }
 
-    let stmts: Vec<Stmt> = instrs.into_iter().map(|i| Stmt::from(&i)).collect();
+    let stmts: Vec<Stmt> = instrs
+        .into_iter()
+        .enumerate()
+        .map(|(i, instr)| Stmt {
+            instr: i,
+            kind: StmtKind::from(&instr),
+        })
+        .collect();
     let stmts = simp(stmts);
     let stmts = ssa::ssa(stmts);
     for stmt in stmts {
