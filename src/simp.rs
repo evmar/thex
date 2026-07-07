@@ -1,5 +1,6 @@
 use crate::ast::{Expr, Stmt};
 
+/// Simplify `xor eax, eax` => setting eax to 0.
 fn xor(stmt: &Stmt) -> Option<Stmt> {
     let Stmt::Set(left, Expr::Call(call)) = stmt else {
         return None;
@@ -42,11 +43,10 @@ mod tests {
 
     #[test]
     fn xor() -> anyhow::Result<()> {
-        // assemble xor(eax, eax)
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(32)?;
-        a.xor(eax, ebx)?;
-        a.xor(ebx, ebx)?;
+        a.xor(eax, ebx)?; // no simp
+        a.xor(ebx, ebx)?; // simp
         insta::assert_snapshot!(simp(a.instructions()), @"
         (set eax (^ eax ebx))
         (set ebx 0x0)
