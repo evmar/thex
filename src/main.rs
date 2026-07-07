@@ -1,7 +1,9 @@
 mod ast;
+mod simp;
 
 use ast::*;
 use iced_x86::{Decoder, DecoderOptions};
+use simp::simp;
 
 fn main() {
     print_assembly(&P3);
@@ -15,9 +17,14 @@ fn print_assembly(snippet: &Snippet) {
         DecoderOptions::NONE,
     );
 
-    for instr in decoder {
-        println!("{:08X}  {}", instr.ip(), instr);
-        println!("  {}", Stmt::from_iced(&instr));
+    let stmts: Vec<Stmt> = decoder
+        .into_iter()
+        .map(|instr| Stmt::from_iced(&instr))
+        .collect();
+    let stmts = simp(stmts);
+    for stmt in stmts {
+        //println!("{:08X}  {}", instr.ip(), instr);
+        println!("  {}", stmt);
     }
 }
 

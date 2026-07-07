@@ -8,10 +8,10 @@ fn var_from_iced(instr: &iced_x86::Instruction, op: u32) -> Var {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Call {
-    func: String,
-    args: Vec<Expr>,
+    pub func: String,
+    pub args: Vec<Expr>,
 }
 
 impl std::fmt::Display for Call {
@@ -25,7 +25,7 @@ impl std::fmt::Display for Call {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Expr {
     Val(u32),
     Var(Var),
