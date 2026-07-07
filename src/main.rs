@@ -1,5 +1,6 @@
 mod ast;
 mod simp;
+mod ssa;
 
 use ast::*;
 use iced_x86::{Decoder, DecoderOptions};
@@ -24,6 +25,7 @@ fn print_assembly(snippet: &Snippet) {
 
     let stmts: Vec<Stmt> = instrs.into_iter().map(|i| Stmt::from(&i)).collect();
     let stmts = simp(stmts);
+    let stmts = ssa::ssa(stmts);
     for stmt in stmts {
         //println!("{:08X}  {}", instr.ip(), instr);
         println!("  {}", stmt);
