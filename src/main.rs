@@ -1,3 +1,6 @@
+mod ast;
+
+use ast::*;
 use iced_x86::{Decoder, DecoderOptions};
 
 fn main() {
@@ -14,6 +17,7 @@ fn print_assembly(snippet: &Snippet) {
 
     for instr in decoder {
         println!("{:08X}  {}", instr.ip(), instr);
+        println!("  {}", Stmt::from_iced(&instr));
     }
 }
 
