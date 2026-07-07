@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Stmt};
+use crate::ast::{Call, Expr, Stmt};
 
 /// Simplify `xor eax, eax` => setting eax to 0.
 fn xor(stmt: &Stmt) -> Option<Stmt> {
@@ -15,16 +15,63 @@ fn xor(stmt: &Stmt) -> Option<Stmt> {
     Some(Stmt::Set(left.clone(), 0.into()))
 }
 
-pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
-    let mut out = vec![];
-    for stmt in stmts {
-        if let Some(s) = xor(&stmt) {
-            out.push(s);
-        } else {
-            out.push(stmt);
+/// Simplify a test followed by je.
+fn test_je(stmts: (&Stmt, &Stmt)) -> Option<Stmt> {
+    // First stmt looks like (set _ (- expr var))
+    let Stmt::Set(left, expr) = stmts.0 else {
+        return None;
+    };
+    let Expr::Var(var) = left else { return None };
+    let "_" = var.as_str() else { return None };
+
+    // Expr is (- expr var)
+    let Expr::Call(call) = expr else { return None };
+    let "-" = call.func.as_str() else { return None };
+    let args = &call.args;
+
+    let Stmt::Jmp(cond, dst) = stmts.1 else {
+        return None;
+    };
+    let Expr::Call(call) = cond else {
+        return None;
+    };
+    let "je" = call.func.as_str() else {
+        return None;
+    };
+
+    Some(Stmt::Jmp(
+        Call {
+            func: "=".into(),
+            args: args.clone(),
         }
+        .into(),
+        dst.clone(),
+    ))
+}
+
+pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
+    let mut stmts = stmts;
+    let mut i = 0;
+    while i < stmts.len() {
+        let stmt = &stmts[i];
+        if let Some(s) = xor(stmt) {
+            stmts[i] = s;
+            continue;
+        }
+
+        if i + 1 < stmts.len() {
+            let next = &stmts[i + 1];
+            if let Some(s) = test_je((&stmt, &next)) {
+                stmts.remove(i);
+                stmts[i] = s;
+                continue;
+            }
+        }
+
+        i += 1;
     }
-    out
+
+    stmts
 }
 
 #[cfg(test)]
@@ -51,6 +98,16 @@ mod tests {
         (set eax (^ eax ebx))
         (set ebx 0x0)
         ");
+        Ok(())
+    }
+
+    #[test]
+    fn je() -> anyhow::Result<()> {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(32)?;
+        a.cmp(eax, ebx)?;
+        a.je(4)?;
+        insta::assert_snapshot!(simp(a.instructions()), @"(jmp (= eax ebx) 0x4)");
         Ok(())
     }
 }

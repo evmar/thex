@@ -119,7 +119,7 @@ impl Expr {
 
 pub enum Stmt {
     Set(Expr, Expr),
-    Jmp(String, Expr),
+    Jmp(Expr, Expr),
 }
 
 impl std::fmt::Display for Stmt {
@@ -179,13 +179,16 @@ impl From<&iced_x86::Instruction> for Stmt {
                 Stmt::Set(left, Expr::from(bin))
             }
             Je | Jne => {
-                let cond = format!("{mnemonic:?}").to_ascii_lowercase();
+                let cond = Expr::from(super::Call {
+                    func: format!("{mnemonic:?}").to_ascii_lowercase(),
+                    args: vec![],
+                });
                 let dst = Expr::from_iced(instr, 0);
                 Stmt::Jmp(cond, dst)
             }
             Ret => {
                 let dst = Expr::Todo("stack ref".into());
-                Stmt::Jmp("".into(), dst)
+                Stmt::Jmp(Expr::from("_".to_string()), dst)
             }
             m => todo!("{m:?} in {instr}"),
         }
