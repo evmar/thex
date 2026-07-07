@@ -26,8 +26,8 @@ fn test_je(stmts: (&Stmt, &Stmt)) -> Option<Stmt> {
 
     // Expr is (- expr var)
     let Expr::Call(call) = expr else { return None };
-    let "-" = call.func.as_str() else { return None };
-    let args = &call.args;
+    let test = call.func.as_str();
+    let args = call.args.as_slice();
 
     let Stmt::Jmp(cond, dst) = stmts.1 else {
         return None;
@@ -35,18 +35,30 @@ fn test_je(stmts: (&Stmt, &Stmt)) -> Option<Stmt> {
     let Expr::Call(call) = cond else {
         return None;
     };
-    let "je" = call.func.as_str() else {
-        return None;
+    let jmp = call.func.as_str();
+    assert!(call.args.is_empty());
+
+    let cond = match (test, jmp) {
+        ("cmp", "je") => Call {
+            func: "=".into(),
+            args: args.to_vec(),
+        },
+        ("test", "jne") => {
+            let [left, right] = args else {
+                unreachable!();
+            };
+            if left != right {
+                return None;
+            }
+            Call {
+                func: "!=".into(),
+                args: vec![args[0].clone(), 0.into()],
+            }
+        }
+        _ => return None,
     };
 
-    Some(Stmt::Jmp(
-        Call {
-            func: "=".into(),
-            args: args.clone(),
-        }
-        .into(),
-        dst.clone(),
-    ))
+    Some(Stmt::Jmp(cond.into(), dst.clone()))
 }
 
 pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
@@ -102,12 +114,28 @@ mod tests {
     }
 
     #[test]
-    fn je() -> anyhow::Result<()> {
+    fn cmp_je() -> anyhow::Result<()> {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(32)?;
         a.cmp(eax, ebx)?;
         a.je(4)?;
         insta::assert_snapshot!(simp(a.instructions()), @"(jmp (= eax ebx) 0x4)");
+        Ok(())
+    }
+
+    #[test]
+    fn test_jmp() -> anyhow::Result<()> {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(32)?;
+        a.test(eax, ebx)?;
+        a.jne(4)?;
+        a.test(eax, eax)?;
+        a.jne(4)?;
+        insta::assert_snapshot!(simp(a.instructions()), @"
+        (set _ (test eax ebx))
+        (jmp (jne) 0x4)
+        (jmp (!= eax 0x0) 0x4)
+        ");
         Ok(())
     }
 }

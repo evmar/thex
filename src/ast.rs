@@ -153,8 +153,8 @@ impl From<&iced_x86::Instruction> for Stmt {
                 let left = Expr::from_iced(instr, 0);
                 let right = Expr::from_iced(instr, 1);
                 let func = match mnemonic {
-                    Cmp => '-',
-                    Test => '&',
+                    Cmp => "cmp",
+                    Test => "test",
                     _ => unreachable!(),
                 }
                 .into();
