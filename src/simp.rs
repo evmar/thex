@@ -32,11 +32,8 @@ fn test_je(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
     let StmtKind::Jmp(cond, dst) = stmts.1 else {
         return None;
     };
-    let Expr::Call(call) = cond else {
-        return None;
-    };
-    let jmp = call.func.as_str();
-    assert!(call.args.is_empty());
+    let jmp = cond.func.as_str();
+    assert!(cond.args.is_empty());
 
     let cond = match (test, jmp) {
         ("cmp", "je") => Call {

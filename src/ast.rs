@@ -141,7 +141,7 @@ impl From<&iced_x86::Instruction> for Stmt {
 
 pub enum StmtKind {
     Set(Expr, Expr),
-    Jmp(Expr, Expr),
+    Jmp(Box<Call>, Expr),
     Raw(String),
 }
 
@@ -206,7 +206,7 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 StmtKind::Set(left, Expr::from(bin))
             }
             Jmp | Je | Jge | Jne => {
-                let cond = Expr::from(super::Call {
+                let cond = Box::new(super::Call {
                     func: format!("{mnemonic:?}").to_ascii_lowercase(),
                     args: vec![],
                 });
@@ -215,7 +215,13 @@ impl From<&iced_x86::Instruction> for StmtKind {
             }
             Ret => {
                 let dst = Expr::Todo("stack ref".into());
-                StmtKind::Jmp(Expr::from("_".to_string()), dst)
+                StmtKind::Jmp(
+                    Box::new(super::Call {
+                        func: "ret".into(),
+                        args: vec![],
+                    }),
+                    dst,
+                )
             }
             Push | Pop | Call | Imul => StmtKind::Raw(format!("{}", instr)),
             m => todo!("{m:?} in {instr}"),

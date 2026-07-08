@@ -81,7 +81,9 @@ fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
             visit_expr(val, visit);
         }
         StmtKind::Jmp(cond, dst) => {
-            visit_expr(cond, visit);
+            for arg in cond.args.iter_mut() {
+                visit_expr(arg, visit);
+            }
             visit_expr(dst, visit);
         }
         StmtKind::Raw(_) => {}
@@ -137,16 +139,13 @@ fn links(blocks: &[Block], block: &Block) -> Vec<usize> {
     let last = block.stmts.last().unwrap();
     let mut nexts = vec![];
     if let StmtKind::Jmp(cond, dst) = &last.kind {
-        let Expr::Call(call) = cond else {
-            unreachable!()
-        };
         if let Expr::Val(addr) = dst {
             let index = blocks.iter().position(|b| b.ip == *addr).unwrap();
             nexts.push(index);
         } else {
             // uhoh
         }
-        if call.func == "jmp" {
+        if cond.func == "jmp" || cond.func == "ret" {
             return nexts;
         }
     }
