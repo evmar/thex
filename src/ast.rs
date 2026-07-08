@@ -109,6 +109,8 @@ impl Expr {
         use iced_x86::OpKind::*;
         match instr.op_kind(op) {
             Immediate8 => Expr::Val(instr.immediate8() as u32),
+            Immediate8to32 => Expr::Val(instr.immediate8to32() as u32),
+            Immediate32 => Expr::Val(instr.immediate32()),
             NearBranch32 => Expr::Val(instr.near_branch32()),
             Register => Expr::Var(var_from_iced(instr, op)),
             Memory => Self::from_memory(instr),
@@ -131,6 +133,7 @@ impl std::fmt::Display for Stmt {
 pub enum StmtKind {
     Set(Expr, Expr),
     Jmp(Expr, Expr),
+    Raw(String),
 }
 
 impl std::fmt::Display for StmtKind {
@@ -138,6 +141,7 @@ impl std::fmt::Display for StmtKind {
         match self {
             StmtKind::Set(var, expr) => write!(f, "(set {var} {expr})"),
             StmtKind::Jmp(cond, addr) => write!(f, "(jmp {cond} {addr})"),
+            StmtKind::Raw(msg) => write!(f, "(todo {msg:?})"),
         }
     }
 }
@@ -175,11 +179,14 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 };
                 StmtKind::Set(Expr::from("_".to_owned()), Expr::from(bin))
             }
-            Xor => {
+            Add | Shl | Sub | Xor => {
                 let left = Expr::from_iced(instr, 0);
                 let right = Expr::from_iced(instr, 1);
                 let func = match mnemonic {
-                    Xor => '^',
+                    Add => "+",
+                    Shl => "<<",
+                    Sub => "-",
+                    Xor => "^",
                     _ => unreachable!(),
                 }
                 .into();
@@ -189,7 +196,7 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 };
                 StmtKind::Set(left, Expr::from(bin))
             }
-            Je | Jne => {
+            Jmp | Je | Jge | Jne => {
                 let cond = Expr::from(super::Call {
                     func: format!("{mnemonic:?}").to_ascii_lowercase(),
                     args: vec![],
@@ -201,6 +208,7 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 let dst = Expr::Todo("stack ref".into());
                 StmtKind::Jmp(Expr::from("_".to_string()), dst)
             }
+            Push | Pop | Call | Imul => StmtKind::Raw(format!("{}", instr)),
             m => todo!("{m:?} in {instr}"),
         }
     }

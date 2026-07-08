@@ -7,7 +7,7 @@ use iced_x86::{Decoder, DecoderOptions};
 use simp::simp;
 
 fn main() {
-    print_assembly(&P3);
+    print_assembly(&P1);
 }
 
 fn print_assembly(snippet: &Snippet) {
@@ -63,6 +63,7 @@ const P2: Snippet = Snippet {
 };
 
 // strlen, from mofo-dump
+#[allow(dead_code)]
 const P3: Snippet = Snippet {
     addr: 0x407e90,
     code: b"\x8b\x4c\x24\x04\x33\xc0\x80\x39\x00\x74\x09\x8a\x54\x08\x01\x40\x84\xd2\x75\xf7\xc3",
