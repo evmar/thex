@@ -99,13 +99,7 @@ mod tests {
     use super::*;
 
     fn simp(instrs: &[iced_x86::Instruction]) -> String {
-        let stmts = instrs
-            .into_iter()
-            .map(|instr| Stmt {
-                ip: instr.ip32(),
-                kind: StmtKind::from(instr),
-            })
-            .collect::<Vec<_>>();
+        let stmts = instrs.into_iter().map(Stmt::from).collect::<Vec<_>>();
         let stmts = super::simp(stmts);
         stmts
             .into_iter()

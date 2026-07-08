@@ -130,6 +130,15 @@ impl std::fmt::Display for Stmt {
     }
 }
 
+impl From<&iced_x86::Instruction> for Stmt {
+    fn from(instr: &iced_x86::Instruction) -> Self {
+        Stmt {
+            ip: instr.ip32(),
+            kind: StmtKind::from(instr),
+        }
+    }
+}
+
 pub enum StmtKind {
     Set(Expr, Expr),
     Jmp(Expr, Expr),

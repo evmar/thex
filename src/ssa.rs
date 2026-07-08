@@ -7,6 +7,15 @@ pub struct Block {
     pub stmts: Vec<Stmt>,
 }
 
+impl From<Vec<Stmt>> for Block {
+    fn from(stmts: Vec<Stmt>) -> Self {
+        Block {
+            ip: stmts[0].ip,
+            stmts,
+        }
+    }
+}
+
 fn blocks(stmts: Vec<Stmt>) -> Vec<Block> {
     let mut jmp_targets = vec![];
     for stmt in &stmts {
@@ -87,8 +96,8 @@ fn rename_stmt(stmt: &mut Stmt, from: &str, to: &str) {
     }
 }
 
-fn ren(block: &mut Block, syms: &mut Syms) {
-    for i in 0..block.stmts.len() {
+fn ssa_names(block: &mut Block, syms: &mut Syms) {
+    for i in (0..block.stmts.len()).rev() {
         let (stmt, rest) = block.stmts[i..].split_first_mut().unwrap();
         match &mut stmt.kind {
             StmtKind::Set(Expr::Var(var), _) => {
@@ -108,8 +117,46 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
 
     let mut syms = Syms::default();
     for block in blocks.iter_mut() {
-        ren(block, &mut syms);
+        ssa_names(block, &mut syms);
     }
 
     blocks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ssa_names(instrs: &[iced_x86::Instruction]) -> String {
+        let mut block: Block = instrs
+            .into_iter()
+            .map(Stmt::from)
+            .collect::<Vec<_>>()
+            .into();
+        let mut syms = Syms::default();
+        super::ssa_names(&mut block, &mut syms);
+        block
+            .stmts
+            .into_iter()
+            .map(|stmt| format!("{}", stmt.kind))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn names() -> anyhow::Result<()> {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(32)?;
+        a.mov(eax, ebx)?;
+        a.mov(ebx, eax)?;
+        a.mov(eax, edx)?;
+        a.mov(ecx, eax)?;
+        insta::assert_snapshot!(ssa_names(a.instructions()), @"
+        (set eax2 ebx)
+        (set ebx1 eax2)
+        (set eax1 edx)
+        (set ecx1 eax1)
+        ");
+        Ok(())
+    }
 }
