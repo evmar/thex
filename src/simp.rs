@@ -43,6 +43,14 @@ fn test_je(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
             func: "=".into(),
             args: args.to_vec(),
         },
+        ("cmp", "jne") => Call {
+            func: "!=".into(),
+            args: args.to_vec(),
+        },
+        ("cmp", "jge") => Call {
+            func: ">=".into(),
+            args: args.to_vec(),
+        },
         ("test", "jne") => {
             let [left, right] = args else {
                 unreachable!();
@@ -101,7 +109,7 @@ mod tests {
         let stmts = super::simp(stmts);
         stmts
             .into_iter()
-            .map(|i| format!("{i}"))
+            .map(|stmt| format!("{}", stmt.kind))
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -125,7 +133,12 @@ mod tests {
         let mut a = CodeAssembler::new(32)?;
         a.cmp(eax, ebx)?;
         a.je(4)?;
-        insta::assert_snapshot!(simp(a.instructions()), @"(jmp (= eax ebx) 0x4)");
+        a.cmp(eax, ebx)?;
+        a.jne(4)?;
+        insta::assert_snapshot!(simp(a.instructions()), @"
+        (jmp (= eax ebx) 0x4)
+        (jmp (!= eax ebx) 0x4)
+        ");
         Ok(())
     }
 
