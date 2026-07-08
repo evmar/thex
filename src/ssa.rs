@@ -133,18 +133,59 @@ fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashSet<String>, HashMap<St
     (ins, outs)
 }
 
+fn links(blocks: &[Block], block: &Block) -> Vec<usize> {
+    let last = block.stmts.last().unwrap();
+    let mut nexts = vec![];
+    if let StmtKind::Jmp(cond, dst) = &last.kind {
+        let Expr::Call(call) = cond else {
+            unreachable!()
+        };
+        if let Expr::Val(addr) = dst {
+            let index = blocks.iter().position(|b| b.ip == *addr).unwrap();
+            nexts.push(index);
+        } else {
+            // uhoh
+        }
+        if call.func == "jmp" {
+            return nexts;
+        }
+    }
+
+    let cur = blocks.iter().position(|b| b.ip == block.ip).unwrap();
+    nexts.push(cur + 1);
+    nexts
+}
+
 pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
     let mut blocks = blocks(stmts);
 
     let mut syms = Syms::default();
-    let mut block_ins: Vec<HashSet<String>> = vec![];
+    let mut block_ins: Vec<HashMap<String, HashSet<String>>> = vec![];
     let mut block_outs: Vec<HashMap<String, String>> = vec![];
     for block in blocks.iter_mut() {
         let (ins, outs) = ssa_names(block, &mut syms);
         println!("{:x} ins {ins:?} outs {outs:?}", block.ip);
-        block_ins.push(ins);
+        block_ins.push(
+            ins.into_iter()
+                .map(|var| (var, Default::default()))
+                .collect(),
+        );
         block_outs.push(outs);
     }
+
+    for block in blocks.iter() {
+        println!("{:x} links {:?}", block.ip, links(&blocks, block));
+    }
+
+    // loop {
+    //     let mut changed = false;
+
+    //     for block in blocks.iter_mut() {}
+
+    //     if !changed {
+    //         break;
+    //     }
+    // }
 
     blocks
 }
