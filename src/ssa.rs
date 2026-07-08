@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Expr, Stmt, StmtKind};
 
@@ -66,58 +66,84 @@ impl Syms {
     }
 }
 
-fn rename_expr(expr: &mut Expr, from: &str, to: &str) {
-    match expr {
-        Expr::Val(_) => {}
-        Expr::Var(name) => {
-            if name == from {
-                *name = to.to_owned();
-            }
+fn visit_expr(expr: &mut Expr, visit: &mut impl FnMut(&mut Expr)) {
+    visit(expr);
+    if let Expr::Call(call) = expr {
+        for arg in call.args.iter_mut() {
+            visit_expr(arg, visit);
         }
-        Expr::Call(call) => {
-            for arg in call.args.iter_mut() {
-                rename_expr(arg, from, to);
-            }
-        }
-        Expr::Todo(_) => todo!(),
     }
 }
 
-fn rename_stmt(stmt: &mut Stmt, from: &str, to: &str) {
+fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
     match &mut stmt.kind {
         StmtKind::Set(_, val) => {
-            rename_expr(val, from, to);
+            visit_expr(val, visit);
         }
         StmtKind::Jmp(cond, dst) => {
-            rename_expr(cond, from, to);
-            rename_expr(dst, from, to);
+            visit_expr(cond, visit);
+            visit_expr(dst, visit);
         }
-        StmtKind::Raw(_) => todo!(),
+        StmtKind::Raw(_) => {}
     }
 }
 
-fn ssa_names(block: &mut Block, syms: &mut Syms) {
+fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashSet<String>, HashMap<String, String>) {
+    // variables introduced in this block
+    let mut locals: HashSet<String> = HashSet::new();
+    // block outputs; variables written to map from e.g. "eax" => "eax3"
+    let mut outs: HashMap<String, String> = HashMap::new();
     for i in (0..block.stmts.len()).rev() {
         let (stmt, rest) = block.stmts[i..].split_first_mut().unwrap();
         match &mut stmt.kind {
             StmtKind::Set(Expr::Var(var), _) => {
                 let new_name = format!("{var}{}", syms.next(var));
+                locals.insert(new_name.clone());
+                if !outs.contains_key(var) {
+                    outs.insert(var.clone(), new_name.clone());
+                }
+                // Update references var=>new_name in subsequent statements.
                 for stmt in rest {
-                    rename_stmt(stmt, var, &new_name);
+                    visit_stmt_expr(stmt, &mut |expr| {
+                        if let Expr::Var(name) = expr
+                            && name == var
+                        {
+                            *name = new_name.clone();
+                        }
+                    });
                 }
                 *var = new_name;
             }
             _ => {}
         };
     }
+
+    // block inputs; variables read from outside
+    let mut ins: HashSet<String> = HashSet::new();
+    for stmt in block.stmts.iter_mut() {
+        visit_stmt_expr(stmt, &mut |expr| {
+            if let Expr::Var(name) = expr {
+                if !locals.contains(name) {
+                    ins.insert(name.clone());
+                }
+            }
+        });
+    }
+
+    (ins, outs)
 }
 
 pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
     let mut blocks = blocks(stmts);
 
     let mut syms = Syms::default();
+    let mut block_ins: Vec<HashSet<String>> = vec![];
+    let mut block_outs: Vec<HashMap<String, String>> = vec![];
     for block in blocks.iter_mut() {
-        ssa_names(block, &mut syms);
+        let (ins, outs) = ssa_names(block, &mut syms);
+        println!("{:x} ins {ins:?} outs {outs:?}", block.ip);
+        block_ins.push(ins);
+        block_outs.push(outs);
     }
 
     blocks
