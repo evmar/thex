@@ -190,6 +190,7 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
         }
     }
 
+    // Union any vars used together into a set.
     let mut u = Union::new();
     for ins in block_ins.iter() {
         for (_, (new_var, vars)) in ins.iter() {
@@ -198,24 +199,26 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
             }
         }
     }
-    println!("union {:#?}", u.sets());
 
-    // for block in blocks.iter_mut() {
-    //     for stmt in block.stmts.iter_mut() {
-    //         if let StmtKind::Set(var, _) = &mut stmt.kind {
-    //             if let Expr::Var(var) = var {
-    //                 let new_var = u.find(var);
-    //                 *var = new_var.clone();
-    //             }
-    //         }
-    //         visit_stmt_expr(stmt, &mut |expr| {
-    //             if let Expr::Var(var) = expr {
-    //                 let new_var = u.find(var);
-    //                 *var = new_var.clone();
-    //             }
-    //         });
-    //     }
-    // }
+    // Replace vars with their union representative.
+    for block in blocks.iter_mut() {
+        for stmt in block.stmts.iter_mut() {
+            if let StmtKind::Set(var, _) = &mut stmt.kind {
+                if let Expr::Var(var) = var {
+                    if let Some(new_var) = u.lookup(var) {
+                        *var = new_var.clone();
+                    }
+                }
+            }
+            visit_stmt_expr(stmt, &mut |expr| {
+                if let Expr::Var(var) = expr {
+                    if let Some(new_var) = u.lookup(var) {
+                        *var = new_var.clone();
+                    }
+                }
+            });
+        }
+    }
 
     blocks
 }

@@ -17,31 +17,51 @@ where
     }
 
     pub fn find(&mut self, a: T) -> T {
-        if self.0.get(&a).is_none() {
-            self.0.insert(a, a);
+        if let Some(a) = self.lookup(a) {
             return a;
         }
-        self.lookup(a)
+        self.0.insert(a, a);
+        return a;
     }
 
-    fn lookup(&self, a: T) -> T {
+    pub fn lookup(&self, a: T) -> Option<T> {
         let mut a = a;
         loop {
-            println!("find {a:?}");
-            let next = self.0.get(&a).unwrap();
+            let next = self.0.get(&a)?;
             if *next == a {
-                return a;
+                return Some(a);
             }
             a = *next;
         }
     }
 
+    #[allow(dead_code)] // useful in debugging
     pub fn sets(&mut self) -> Vec<HashSet<T>> {
         let mut sets = HashMap::<T, HashSet<T>>::new();
         for a in self.0.keys() {
-            let set = sets.entry(self.lookup(*a)).or_default();
+            let set = sets.entry(self.lookup(*a).unwrap()).or_default();
             set.insert(*a);
         }
         sets.into_values().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_union() {
+        let mut u = Union::new();
+        u.join(1, 2);
+        u.join(2, 3);
+        assert_eq!(u.find(1), u.find(2));
+        assert_eq!(u.find(2), u.find(3));
+        assert_eq!(u.find(1), 1);
+        assert_eq!(u.find(2), 1);
+        assert_eq!(u.find(3), 1);
+        u.join(4, 5);
+        assert_eq!(u.find(4), u.find(5));
+        assert_ne!(u.find(1), u.find(4));
     }
 }
