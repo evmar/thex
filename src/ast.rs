@@ -165,10 +165,14 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 let expr = Expr::from_iced(instr, 1);
                 StmtKind::Set(var, expr)
             }
-            Inc => {
+            Inc | Dec => {
                 let expr = Expr::from_iced(instr, 0);
                 let bin = super::Call {
-                    func: "+".into(),
+                    func: match mnemonic {
+                        Inc => "+".into(),
+                        Dec => "-".into(),
+                        _ => unreachable!(),
+                    },
                     args: vec![expr.clone(), Expr::Val(1)],
                 };
                 StmtKind::Set(expr, Expr::from(bin))
@@ -188,14 +192,16 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 };
                 StmtKind::Set(Expr::from("_".to_owned()), Expr::from(bin))
             }
-            Add | Shl | Sub | Xor => {
+            Add | Shl | Sub | Xor | Sar | And => {
                 let left = Expr::from_iced(instr, 0);
                 let right = Expr::from_iced(instr, 1);
                 let func = match mnemonic {
                     Add => "+",
                     Shl => "<<",
+                    Sar => ">>",
                     Sub => "-",
                     Xor => "^",
+                    And => "&",
                     _ => unreachable!(),
                 }
                 .into();
@@ -205,7 +211,17 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 };
                 StmtKind::Set(left, Expr::from(bin))
             }
-            Jmp | Je | Jge | Jne => {
+            Lea => {
+                let left = Expr::from_iced(instr, 0);
+                let right = Expr::from_iced(instr, 1);
+                let Expr::Call(mut call) = right else {
+                    unreachable!()
+                };
+                assert_eq!(call.func, "mem");
+                call.func = "+".into();
+                StmtKind::Set(left, Expr::Call(call))
+            }
+            Jmp | Je | Jge | Jne | Jle | Jl => {
                 let cond = Box::new(super::Call {
                     func: format!("{mnemonic:?}").to_ascii_lowercase(),
                     args: vec![],
@@ -223,7 +239,7 @@ impl From<&iced_x86::Instruction> for StmtKind {
                     dst,
                 )
             }
-            Push | Pop | Call | Imul => StmtKind::Raw(format!("{}", instr)),
+            Push | Pop | Call | Imul | Cdq | Idiv => StmtKind::Raw(format!("{}", instr)),
             m => todo!("{m:?} in {instr}"),
         }
     }

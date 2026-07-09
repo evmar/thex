@@ -79,8 +79,8 @@ pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
         if i + 1 < stmts.len() {
             let next = &stmts[i + 1].kind;
             if let Some(s) = test_je((&stmt, &next)) {
-                stmts.remove(i);
                 stmts[i].kind = s;
+                stmts.remove(i + 1);
                 continue;
             }
         }

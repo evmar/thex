@@ -8,7 +8,7 @@ use iced_x86::{Decoder, DecoderOptions};
 use simp::simp;
 
 fn main() {
-    print_assembly(&P1);
+    print_assembly(&P2);
 }
 
 fn print_assembly(snippet: &Snippet) {
