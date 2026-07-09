@@ -190,6 +190,11 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
         }
     }
 
+    // The entry point block includes the original register values as inputs.
+    for (var, (_, vars)) in block_ins[0].iter_mut() {
+        vars.insert(var.clone());
+    }
+
     // Union any vars used together into a set.
     let mut u = Union::new();
     for ins in block_ins.iter() {
@@ -199,6 +204,7 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
             }
         }
     }
+    // println!("{:?}", u.sets());
 
     // Replace vars with their union representative.
     for block in blocks.iter_mut() {
