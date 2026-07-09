@@ -90,58 +90,45 @@ fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
     }
 }
 
-fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashSet<String>, HashMap<String, String>) {
-    // variables introduced in this block
-    let mut locals: HashSet<String> = HashSet::new();
-    // block outputs; variables written to map from e.g. "eax" => "eax3"
-    let mut outs: HashMap<String, String> = HashMap::new();
-    for i in (0..block.stmts.len()).rev() {
-        let (stmt, rest) = block.stmts[i..].split_first_mut().unwrap();
-        match &mut stmt.kind {
-            StmtKind::Set(Expr::Var(var), _) => {
-                let new_name = format!("{var}{}", syms.next(var));
-                locals.insert(new_name.clone());
-                if !outs.contains_key(var) {
-                    outs.insert(var.clone(), new_name.clone());
-                }
-                // Update references var=>new_name in subsequent statements.
-                for stmt in rest {
-                    visit_stmt_expr(stmt, &mut |expr| {
-                        if let Expr::Var(name) = expr
-                            && name == var
-                        {
-                            *name = new_name.clone();
-                        }
-                    });
-                }
-                *var = new_name;
-            }
-            _ => {}
-        };
-    }
-
-    // block inputs; variables read from outside
-    let mut ins: HashSet<String> = HashSet::new();
+fn ssa_names(
+    block: &mut Block,
+    syms: &mut Syms,
+) -> (HashMap<String, String>, HashMap<String, String>) {
+    let mut ins: HashMap<String, String> = HashMap::new();
+    let mut new_vars: HashMap<String, String> = HashMap::new();
     for stmt in block.stmts.iter_mut() {
         visit_stmt_expr(stmt, &mut |expr| {
-            if let Expr::Var(name) = expr {
-                if !locals.contains(name) {
-                    ins.insert(name.clone());
+            let Expr::Var(var) = expr else {
+                return;
+            };
+            match new_vars.get(var) {
+                Some(new_var) => *var = new_var.clone(),
+                None => {
+                    // read of new variable means it's a block input
+                    let new_var = format!("{var}{}", syms.next(var));
+                    ins.insert(var.clone(), new_var.clone()); // never overwritten
+                    new_vars.insert(var.clone(), new_var.clone()); // may be overwritten
+                    *var = new_var;
                 }
             }
         });
+        if let StmtKind::Set(Expr::Var(var), _) = &mut stmt.kind {
+            let new_var = format!("{var}{}", syms.next(var));
+            new_vars.insert(var.clone(), new_var.clone());
+            *var = new_var;
+        }
     }
 
-    (ins, outs)
+    (ins, new_vars)
 }
 
-fn links(blocks: &[Block], block: &Block) -> Vec<usize> {
-    let last = block.stmts.last().unwrap();
+fn links(blocks: &[Block], block: usize) -> Vec<usize> {
+    let last = blocks[block].stmts.last().unwrap();
     let mut nexts = vec![];
     if let StmtKind::Jmp(cond, dst) = &last.kind {
         if let Expr::Val(addr) = dst {
-            let index = blocks.iter().position(|b| b.ip == *addr).unwrap();
-            nexts.push(index);
+            let next = blocks.iter().position(|b| b.ip == *addr).unwrap();
+            nexts.push(next);
         } else {
             // uhoh
         }
@@ -149,9 +136,7 @@ fn links(blocks: &[Block], block: &Block) -> Vec<usize> {
             return nexts;
         }
     }
-
-    let cur = blocks.iter().position(|b| b.ip == block.ip).unwrap();
-    nexts.push(cur + 1);
+    nexts.push(block + 1);
     nexts
 }
 
@@ -159,32 +144,53 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
     let mut blocks = blocks(stmts);
 
     let mut syms = Syms::default();
-    let mut block_ins: Vec<HashMap<String, HashSet<String>>> = vec![];
+    let mut block_ins: Vec<HashMap<String, (String, HashSet<String>)>> = vec![];
     let mut block_outs: Vec<HashMap<String, String>> = vec![];
     for block in blocks.iter_mut() {
         let (ins, outs) = ssa_names(block, &mut syms);
-        println!("{:x} ins {ins:?} outs {outs:?}", block.ip);
         block_ins.push(
             ins.into_iter()
-                .map(|var| (var, Default::default()))
+                .map(|(var, new_var)| (var, (new_var, Default::default())))
                 .collect(),
         );
         block_outs.push(outs);
     }
 
-    for block in blocks.iter() {
-        println!("{:x} links {:?}", block.ip, links(&blocks, block));
-    }
-
     // loop {
     //     let mut changed = false;
 
-    //     for block in blocks.iter_mut() {}
+    //     for src in 0..blocks.len() {
+    //         for dst in links(&blocks, src) {
+    //             let mut passthrough = HashSet::new();
+    //             for (var, vars) in &mut block_ins[dst] {
+    //                 if let Some(new_var) = block_outs[src].get(var) {
+    //                     if vars.insert(new_var.clone()) {
+    //                         changed = true;
+    //                     }
+    //                 } else {
+    //                     passthrough.insert(var.clone());
+    //                 }
+    //             }
+
+    //             for var in passthrough {
+    //                 block_outs[src].insert(var.clone(), var.clone());
+    //                 block_ins[src].insert(var.clone(), HashSet::new());
+    //                 changed = true;
+    //             }
+    //         }
+    //     }
 
     //     if !changed {
     //         break;
     //     }
     // }
+
+    for i in 0..blocks.len() {
+        let block = &blocks[i];
+        let ins = &block_ins[i];
+        let outs = &block_outs[i];
+        println!("{:x} ins {ins:?} outs {outs:?}", block.ip);
+    }
 
     blocks
 }
