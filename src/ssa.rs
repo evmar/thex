@@ -59,10 +59,10 @@ fn blocks(stmts: Vec<Stmt>) -> Vec<Block> {
 #[derive(Default)]
 struct Syms(HashMap<String, u8>);
 impl Syms {
-    fn next(&mut self, var: &str) -> u8 {
+    fn next(&mut self, var: &str) -> String {
         let next: u8 = self.0.get(var).copied().unwrap_or(0) + 1;
         self.0.insert(var.to_owned(), next);
-        next
+        format!("{var}{next}")
     }
 }
 
@@ -109,7 +109,7 @@ fn ssa_names(
                 Some(new_var) => *var = new_var.clone(),
                 None => {
                     // read of new variable means it's a block input
-                    let new_var = format!("{var}{}", syms.next(var));
+                    let new_var = syms.next(var);
                     ins.insert(var.clone(), new_var.clone()); // never overwritten
                     new_vars.insert(var.clone(), new_var.clone()); // may be overwritten
                     *var = new_var;
@@ -117,7 +117,7 @@ fn ssa_names(
             }
         });
         if let StmtKind::Set(Expr::Var(var), _) = &mut stmt.kind {
-            let new_var = format!("{var}{}", syms.next(var));
+            let new_var = syms.next(var);
             new_vars.insert(var.clone(), new_var.clone());
             *var = new_var;
         }
@@ -160,34 +160,35 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
         block_outs.push(outs);
     }
 
-    // loop {
-    //     let mut changed = false;
+    loop {
+        let mut changed = false;
 
-    //     for src in 0..blocks.len() {
-    //         for dst in links(&blocks, src) {
-    //             let mut passthrough = HashSet::new();
-    //             for (var, vars) in &mut block_ins[dst] {
-    //                 if let Some(new_var) = block_outs[src].get(var) {
-    //                     if vars.insert(new_var.clone()) {
-    //                         changed = true;
-    //                     }
-    //                 } else {
-    //                     passthrough.insert(var.clone());
-    //                 }
-    //             }
+        for src in 0..blocks.len() {
+            for dst in links(&blocks, src) {
+                let mut passthrough = HashSet::new();
+                for (var, (_, vars)) in &mut block_ins[dst] {
+                    if let Some(out_var) = block_outs[src].get(var) {
+                        if vars.insert(out_var.clone()) {
+                            changed = true;
+                        }
+                    } else {
+                        passthrough.insert(var.clone());
+                    }
+                }
 
-    //             for var in passthrough {
-    //                 block_outs[src].insert(var.clone(), var.clone());
-    //                 block_ins[src].insert(var.clone(), HashSet::new());
-    //                 changed = true;
-    //             }
-    //         }
-    //     }
+                for var in passthrough {
+                    let new_var = syms.next(&var);
+                    block_ins[src].insert(var.clone(), (new_var.clone(), HashSet::new()));
+                    block_outs[src].insert(var, new_var);
+                    changed = true;
+                }
+            }
+        }
 
-    //     if !changed {
-    //         break;
-    //     }
-    // }
+        if !changed {
+            break;
+        }
+    }
 
     for i in 0..blocks.len() {
         let block = &blocks[i];
