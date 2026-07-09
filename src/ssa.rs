@@ -252,10 +252,10 @@ mod tests {
         a.mov(eax, edx)?;
         a.mov(ecx, eax)?;
         insta::assert_snapshot!(ssa_names(a.instructions()), @"
-        (set eax2 ebx)
-        (set ebx1 eax2)
-        (set eax1 edx)
-        (set ecx1 eax1)
+        (set eax1 ebx1)
+        (set ebx2 eax1)
+        (set eax2 edx1)
+        (set ecx1 eax2)
         ");
         Ok(())
     }
