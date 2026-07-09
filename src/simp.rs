@@ -15,18 +15,45 @@ fn xor(stmt: &StmtKind) -> Option<StmtKind> {
     Some(StmtKind::Set(left.clone(), 0.into()))
 }
 
-/// Simplify a test followed by je.
-fn test_je(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
-    // First stmt looks like (set _ (- expr var))
+/// Simplify (test x x) to (cmp x 0).
+/// https://stackoverflow.com/questions/39556649/in-x86-whats-difference-between-test-eax-eax-and-cmp-eax-0
+fn test_to_cmp(stmt: &StmtKind) -> Option<StmtKind> {
+    let StmtKind::Set(left, Expr::Call(call)) = stmt else {
+        return None;
+    };
+    let "test" = call.func.as_str() else {
+        return None;
+    };
+    let [arg1, arg2] = call.args.as_slice() else {
+        return None;
+    };
+    if arg1 != arg2 {
+        return None;
+    }
+    Some(StmtKind::Set(
+        left.clone(),
+        Call {
+            func: "cmp".into(),
+            args: vec![arg1.clone(), 0.into()],
+        }
+        .into(),
+    ))
+}
+
+/// Simplify a cmp followed by conditional jmp.
+fn cmp_jmp(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
+    // First stmt looks like (set _ (cmp expr var))
     let StmtKind::Set(left, expr) = stmts.0 else {
         return None;
     };
     let Expr::Var(var) = left else { return None };
     let "_" = var.as_str() else { return None };
 
-    // Expr is (- expr var)
+    // Expr is (cmp expr var)
     let Expr::Call(call) = expr else { return None };
-    let test = call.func.as_str();
+    let "cmp" = call.func.as_str() else {
+        return None;
+    };
     let args = call.args.as_slice();
 
     let StmtKind::Jmp(cond, dst) = stmts.1 else {
@@ -35,31 +62,19 @@ fn test_je(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
     let jmp = cond.func.as_str();
     assert!(cond.args.is_empty());
 
-    let cond = match (test, jmp) {
-        ("cmp", "je") => Call {
+    let cond = match jmp {
+        "je" => Call {
             func: "=".into(),
             args: args.to_vec(),
         },
-        ("cmp", "jne") => Call {
+        "jne" => Call {
             func: "!=".into(),
             args: args.to_vec(),
         },
-        ("cmp", "jge") => Call {
+        "jge" => Call {
             func: ">=".into(),
             args: args.to_vec(),
         },
-        ("test", "jne") => {
-            let [left, right] = args else {
-                unreachable!();
-            };
-            if left != right {
-                return None;
-            }
-            Call {
-                func: "!=".into(),
-                args: vec![args[0].clone(), 0.into()],
-            }
-        }
         _ => return None,
     };
 
@@ -75,10 +90,14 @@ pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
             stmts[i].kind = s;
             continue;
         }
+        if let Some(s) = test_to_cmp(&stmt) {
+            stmts[i].kind = s;
+        }
+        let stmt = &stmts[i].kind;
 
         if i + 1 < stmts.len() {
             let next = &stmts[i + 1].kind;
-            if let Some(s) = test_je((&stmt, &next)) {
+            if let Some(s) = cmp_jmp((&stmt, &next)) {
                 stmts[i].kind = s;
                 stmts.remove(i + 1);
                 continue;
@@ -134,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    fn test_jmp() -> anyhow::Result<()> {
+    fn test_jne() -> anyhow::Result<()> {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(32)?;
         a.test(eax, ebx)?;
