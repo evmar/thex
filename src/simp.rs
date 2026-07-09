@@ -62,23 +62,23 @@ fn cmp_jmp(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
     let jmp = cond.func.as_str();
     assert!(cond.args.is_empty());
 
-    let cond = match jmp {
-        "je" => Call {
-            func: "=".into(),
-            args: args.to_vec(),
-        },
-        "jne" => Call {
-            func: "!=".into(),
-            args: args.to_vec(),
-        },
-        "jge" => Call {
-            func: ">=".into(),
-            args: args.to_vec(),
-        },
+    let func = match jmp {
+        "je" => "=",
+        "jne" => "!=",
+        "jge" => ">=",
+        "jl" => "<",
+        "jle" => "<=",
         _ => return None,
     };
 
-    Some(StmtKind::Jmp(cond.into(), dst.clone()))
+    Some(StmtKind::Jmp(
+        Call {
+            func: func.into(),
+            args: args.to_vec(),
+        }
+        .into(),
+        dst.clone(),
+    ))
 }
 
 pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
