@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::{Expr, Stmt, StmtKind};
+use crate::{
+    ast::{Expr, Stmt, StmtKind},
+    union::Union,
+};
 
 pub struct Block {
     pub ip: u32,
@@ -190,12 +193,32 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
         }
     }
 
-    for i in 0..blocks.len() {
-        let block = &blocks[i];
-        let ins = &block_ins[i];
-        let outs = &block_outs[i];
-        println!("{:x} ins {ins:?} outs {outs:?}", block.ip);
+    let mut u = Union::new();
+    for ins in block_ins.iter() {
+        for (_, (new_var, vars)) in ins.iter() {
+            for var in vars {
+                u.join(new_var, var);
+            }
+        }
     }
+    println!("union {:#?}", u.sets());
+
+    // for block in blocks.iter_mut() {
+    //     for stmt in block.stmts.iter_mut() {
+    //         if let StmtKind::Set(var, _) = &mut stmt.kind {
+    //             if let Expr::Var(var) = var {
+    //                 let new_var = u.find(var);
+    //                 *var = new_var.clone();
+    //             }
+    //         }
+    //         visit_stmt_expr(stmt, &mut |expr| {
+    //             if let Expr::Var(var) = expr {
+    //                 let new_var = u.find(var);
+    //                 *var = new_var.clone();
+    //             }
+    //         });
+    //     }
+    // }
 
     blocks
 }

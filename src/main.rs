@@ -1,6 +1,7 @@
 mod ast;
 mod simp;
 mod ssa;
+mod union;
 
 use ast::*;
 use iced_x86::{Decoder, DecoderOptions};
