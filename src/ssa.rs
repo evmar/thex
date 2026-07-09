@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{Expr, Stmt, StmtKind},
+    ast::{Expr, Stmt, StmtKind, Var},
     union::Union,
 };
 
@@ -60,12 +60,12 @@ fn blocks(stmts: Vec<Stmt>) -> Vec<Block> {
 }
 
 #[derive(Default)]
-struct Syms(HashMap<String, u8>);
+struct Syms(HashMap<Var, u8>);
 impl Syms {
-    fn next(&mut self, var: &str) -> String {
+    fn next(&mut self, var: &str) -> Var {
         let next: u8 = self.0.get(var).copied().unwrap_or(0) + 1;
-        self.0.insert(var.to_owned(), next);
-        format!("{var}{next}")
+        self.0.insert(Var::new(var), next);
+        Var::new(format!("{var}{next}"))
     }
 }
 
@@ -97,12 +97,9 @@ fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
     }
 }
 
-fn ssa_names(
-    block: &mut Block,
-    syms: &mut Syms,
-) -> (HashMap<String, String>, HashMap<String, String>) {
-    let mut ins: HashMap<String, String> = HashMap::new();
-    let mut new_vars: HashMap<String, String> = HashMap::new();
+fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashMap<Var, Var>, HashMap<Var, Var>) {
+    let mut ins: HashMap<Var, Var> = HashMap::new();
+    let mut new_vars: HashMap<Var, Var> = HashMap::new();
     for stmt in block.stmts.iter_mut() {
         visit_stmt_expr(stmt, &mut |expr| {
             let Expr::Var(var) = expr else {
@@ -151,8 +148,8 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
     let mut blocks = blocks(stmts);
 
     let mut syms = Syms::default();
-    let mut block_ins: Vec<HashMap<String, (String, HashSet<String>)>> = vec![];
-    let mut block_outs: Vec<HashMap<String, String>> = vec![];
+    let mut block_ins: Vec<HashMap<Var, (Var, HashSet<Var>)>> = vec![];
+    let mut block_outs: Vec<HashMap<Var, Var>> = vec![];
     for block in blocks.iter_mut() {
         let (ins, outs) = ssa_names(block, &mut syms);
         block_ins.push(

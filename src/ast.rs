@@ -1,9 +1,9 @@
-type Var = String;
+pub type Var = smol_str::SmolStr;
 
 fn var_from_iced(instr: &iced_x86::Instruction, op: u32) -> Var {
     use iced_x86::OpKind::*;
     match instr.op_kind(op) {
-        Register => format!("{:?}", instr.op_register(op)).to_ascii_lowercase(),
+        Register => Var::new(format!("{:?}", instr.op_register(op)).to_ascii_lowercase()),
         k => todo!("{k:?}"),
     }
 }
@@ -52,7 +52,7 @@ impl From<u32> for Expr {
 
 impl From<String> for Expr {
     fn from(value: String) -> Self {
-        Expr::Var(value)
+        Expr::Var(Var::new(value))
     }
 }
 
