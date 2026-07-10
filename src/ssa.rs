@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{Expr, Stmt, StmtKind, Var},
+    ast::{Expr, Stmt, StmtKind, Var, visit_stmt_expr},
     union::Union,
 };
 
@@ -66,35 +66,6 @@ impl Syms {
         let next: u8 = self.0.get(var).copied().unwrap_or(0) + 1;
         self.0.insert(Var::new(var), next);
         Var::new(format!("{var}{next}"))
-    }
-}
-
-fn visit_expr(expr: &mut Expr, visit: &mut impl FnMut(&mut Expr)) {
-    visit(expr);
-    if let Expr::Call(call) = expr {
-        for arg in call.args.iter_mut() {
-            visit_expr(arg, visit);
-        }
-    }
-}
-
-fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
-    match &mut stmt.kind {
-        StmtKind::Do(expr) => visit_expr(expr, visit),
-        StmtKind::Set(dst, val) => {
-            if let Expr::Var(_) = dst {
-            } else {
-                visit_expr(dst, visit);
-            }
-            visit_expr(val, visit);
-        }
-        StmtKind::Jmp(cond, dst) => {
-            for arg in cond.args.iter_mut() {
-                visit_expr(arg, visit);
-            }
-            visit_expr(dst, visit);
-        }
-        StmtKind::Raw(_) => {}
     }
 }
 

@@ -271,3 +271,32 @@ impl From<&iced_x86::Instruction> for StmtKind {
         }
     }
 }
+
+pub fn visit_expr(expr: &mut Expr, visit: &mut impl FnMut(&mut Expr)) {
+    visit(expr);
+    if let Expr::Call(call) = expr {
+        for arg in call.args.iter_mut() {
+            visit_expr(arg, visit);
+        }
+    }
+}
+
+pub fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
+    match &mut stmt.kind {
+        StmtKind::Do(expr) => visit_expr(expr, visit),
+        StmtKind::Set(dst, val) => {
+            if let Expr::Var(_) = dst {
+            } else {
+                visit_expr(dst, visit);
+            }
+            visit_expr(val, visit);
+        }
+        StmtKind::Jmp(cond, dst) => {
+            for arg in cond.args.iter_mut() {
+                visit_expr(arg, visit);
+            }
+            visit_expr(dst, visit);
+        }
+        StmtKind::Raw(_) => {}
+    }
+}

@@ -1,4 +1,5 @@
 mod ast;
+mod inline;
 mod simp;
 mod ssa;
 mod union;
@@ -6,6 +7,8 @@ mod union;
 use ast::*;
 use iced_x86::{Decoder, DecoderOptions};
 use simp::simp;
+
+use crate::inline::inline;
 
 #[derive(Clone, Copy)]
 pub enum IP {
@@ -54,7 +57,8 @@ fn print_assembly(snippet: &Snippet) {
         })
         .collect();
     let stmts = simp(stmts);
-    let blocks = ssa::ssa(stmts);
+    let mut blocks = ssa::ssa(stmts);
+    inline(&mut blocks);
     for block in &blocks {
         println!("{:x}:", block.ip);
         for stmt in &block.stmts {
