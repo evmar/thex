@@ -30,7 +30,7 @@ impl IP {
 }
 
 fn main() {
-    print_assembly(&P2);
+    print_assembly(&P4);
 }
 
 fn print_assembly(snippet: &Snippet) {

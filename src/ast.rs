@@ -109,8 +109,11 @@ impl Expr {
         use iced_x86::OpKind::*;
         match instr.op_kind(op) {
             Immediate8 => Expr::Val(instr.immediate8() as u32),
+            Immediate8to16 => Expr::Val(instr.immediate8to16() as u32),
             Immediate8to32 => Expr::Val(instr.immediate8to32() as u32),
+            Immediate16 => Expr::Val(instr.immediate16() as u32),
             Immediate32 => Expr::Val(instr.immediate32()),
+            NearBranch16 => Expr::Val(instr.near_branch16() as u32),
             NearBranch32 => Expr::Val(instr.near_branch32()),
             Register => Expr::Var(var_from_iced(instr, op)),
             Memory => Self::from_memory(instr),
@@ -221,7 +224,7 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 call.func = "+".into();
                 StmtKind::Set(left, Expr::Call(call))
             }
-            Jmp | Je | Jge | Jne | Jle | Jl => {
+            Jmp | Jae | Jb | Je | Jge | Jne | Jle | Jl | Jcxz => {
                 let cond = Box::new(super::Call {
                     func: format!("{mnemonic:?}").to_ascii_lowercase(),
                     args: vec![],
@@ -229,7 +232,7 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 let dst = Expr::from_iced(instr, 0);
                 StmtKind::Jmp(cond, dst)
             }
-            Ret => {
+            Ret | Retf => {
                 let dst = Expr::Todo("stack ref".into());
                 StmtKind::Jmp(
                     Box::new(super::Call {
@@ -239,7 +242,9 @@ impl From<&iced_x86::Instruction> for StmtKind {
                     dst,
                 )
             }
-            Push | Pop | Call | Imul | Cdq | Idiv => StmtKind::Raw(format!("{}", instr)),
+            Push | Pop | Call | Imul | Cdq | Idiv | Int | Cli | Sti | Not | Neg | Cld | Stosb => {
+                StmtKind::Raw(format!("{}", instr))
+            }
             m => todo!("{m:?} in {instr}"),
         }
     }
