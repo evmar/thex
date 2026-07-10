@@ -143,6 +143,7 @@ impl From<&iced_x86::Instruction> for Stmt {
 }
 
 pub enum StmtKind {
+    Do(Expr),
     Set(Expr, Expr),
     Jmp(Box<Call>, Expr),
     Raw(String),
@@ -151,6 +152,7 @@ pub enum StmtKind {
 impl std::fmt::Display for StmtKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            StmtKind::Do(expr) => write!(f, "{expr}"),
             StmtKind::Set(var, expr) => write!(f, "(set {var} {expr})"),
             StmtKind::Jmp(cond, addr) => write!(f, "(jmp {cond} {addr})"),
             StmtKind::Raw(msg) => write!(f, "(todo {msg:?})"),
@@ -193,7 +195,7 @@ impl From<&iced_x86::Instruction> for StmtKind {
                     func,
                     args: vec![left, right],
                 };
-                StmtKind::Set(Expr::from("_".to_owned()), Expr::from(bin))
+                StmtKind::Do(Expr::from(bin))
             }
             Add | Shl | Sub | Xor | Sar | And => {
                 let left = Expr::from_iced(instr, 0);

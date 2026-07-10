@@ -80,6 +80,7 @@ fn visit_expr(expr: &mut Expr, visit: &mut impl FnMut(&mut Expr)) {
 
 fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
     match &mut stmt.kind {
+        StmtKind::Do(expr) => visit_expr(expr, visit),
         StmtKind::Set(dst, val) => {
             if let Expr::Var(_) = dst {
             } else {

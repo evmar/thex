@@ -18,7 +18,7 @@ fn xor(stmt: &StmtKind) -> Option<StmtKind> {
 /// Simplify (test x x) to (cmp x 0).
 /// https://stackoverflow.com/questions/39556649/in-x86-whats-difference-between-test-eax-eax-and-cmp-eax-0
 fn test_to_cmp(stmt: &StmtKind) -> Option<StmtKind> {
-    let StmtKind::Set(left, Expr::Call(call)) = stmt else {
+    let StmtKind::Do(Expr::Call(call)) = stmt else {
         return None;
     };
     let "test" = call.func.as_str() else {
@@ -30,8 +30,7 @@ fn test_to_cmp(stmt: &StmtKind) -> Option<StmtKind> {
     if arg1 != arg2 {
         return None;
     }
-    Some(StmtKind::Set(
-        left.clone(),
+    Some(StmtKind::Do(
         Call {
             func: "cmp".into(),
             args: vec![arg1.clone(), 0.into()],
@@ -42,15 +41,10 @@ fn test_to_cmp(stmt: &StmtKind) -> Option<StmtKind> {
 
 /// Simplify a cmp followed by conditional jmp.
 fn cmp_jmp(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
-    // First stmt looks like (set _ (cmp expr var))
-    let StmtKind::Set(left, expr) = stmts.0 else {
+    // First stmt looks like (do (cmp expr var))
+    let StmtKind::Do(Expr::Call(call)) = stmts.0 else {
         return None;
     };
-    let Expr::Var(var) = left else { return None };
-    let "_" = var.as_str() else { return None };
-
-    // Expr is (cmp expr var)
-    let Expr::Call(call) = expr else { return None };
     let "cmp" = call.func.as_str() else {
         return None;
     };
@@ -164,7 +158,7 @@ mod tests {
         a.test(eax, eax)?;
         a.jne(4)?;
         insta::assert_snapshot!(simp(a.instructions()), @"
-        (set _ (test eax ebx))
+        (test eax ebx)
         (jmp (jne) 0x4)
         (jmp (!= eax 0x0) 0x4)
         ");
