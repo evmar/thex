@@ -42,6 +42,11 @@ impl From<u32> for Expr {
     }
 }
 
+impl From<&str> for Expr {
+    fn from(value: &str) -> Self {
+        value.to_owned().into()
+    }
+}
 impl From<String> for Expr {
     fn from(value: String) -> Self {
         Expr::Var(Var::new(value))
