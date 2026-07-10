@@ -264,7 +264,15 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 };
                 StmtKind::Set(expr, Expr::from(bin))
             }
-            Push | Pop | Call | Imul | Cdq | Idiv | Int | Cli | Sti | Cld | Stosb => {
+            Call => {
+                let expr = Expr::from_iced(instr, 0);
+                let call = super::Call {
+                    func: "call".into(),
+                    args: vec![expr.clone()],
+                };
+                StmtKind::Do(call.into())
+            }
+            Push | Pop | Imul | Cdq | Idiv | Int | Cli | Sti | Cld | Stosb => {
                 StmtKind::Raw(format!("{}", instr))
             }
             m => todo!("{m:?} in {instr}"),
