@@ -8,7 +8,7 @@ use ast::*;
 use iced_x86::{Decoder, DecoderOptions};
 use simp::simp;
 
-use crate::inline::inline;
+use crate::{inline::inline, ssa::Block};
 
 /// asm explorer
 #[derive(argh::FromArgs)]
@@ -16,6 +16,10 @@ struct Args {
     /// which snippet to render
     #[argh(option)]
     snippet: usize,
+
+    /// html output
+    #[argh(switch)]
+    html: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -43,39 +47,67 @@ impl IP {
 fn main() {
     let args: Args = argh::from_env();
     let snippet = [&P1, &P2, &P3, &P4, &P5][args.snippet];
-    print_assembly(snippet);
+    let (instrs, blocks) = analyze(snippet);
+    if args.html {
+        html(&instrs, &blocks);
+    } else {
+        print(&instrs, &blocks);
+    }
 }
 
-fn print_assembly(snippet: &Snippet) {
+fn analyze(snippet: &Snippet) -> (Vec<iced_x86::Instruction>, Vec<Block>) {
     let decoder = Decoder::with_ip(
         snippet.ip.bitness(),
         snippet.code,
         snippet.ip.eip() as u64,
         DecoderOptions::NONE,
     );
-
     let instrs = decoder.into_iter().collect::<Vec<_>>();
-    for instr in instrs.iter() {
-        println!("{:08X}  {}", instr.ip(), instr);
-    }
 
     let stmts: Vec<Stmt> = instrs
-        .into_iter()
+        .iter()
         .map(|instr| Stmt {
             ip: instr.ip32(),
-            kind: StmtKind::from(&instr),
+            kind: StmtKind::from(instr),
         })
         .collect();
     let stmts = simp(stmts);
     let mut blocks = ssa::ssa(stmts);
     inline(&mut blocks);
-    for block in &blocks {
+    (instrs, blocks)
+}
+
+fn print(instrs: &[iced_x86::Instruction], blocks: &[Block]) {
+    for instr in instrs {
+        println!("{:08x} {}", instr.ip32(), instr);
+    }
+
+    for block in blocks.iter() {
         println!("{:x}:", block.ip);
         for stmt in &block.stmts {
             println!("  {}", stmt);
         }
         println!();
     }
+}
+
+fn html(instrs: &[iced_x86::Instruction], blocks: &[Block]) {
+    println!("<div style='display:flex'>");
+
+    println!("<pre>");
+    for instr in instrs {
+        println!("{:08x} {}", instr.ip32(), instr);
+    }
+    println!("</pre>");
+
+    println!("<pre>");
+    for block in blocks {
+        for stmt in &block.stmts {
+            println!("{}", stmt);
+        }
+        println!();
+    }
+    println!("</pre>");
 }
 
 struct Snippet {
