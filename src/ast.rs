@@ -238,13 +238,25 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 let dst = Expr::Todo("stack ref".into());
                 StmtKind::Jmp(
                     Box::new(super::Call {
-                        func: "ret".into(),
+                        func: format!("{mnemonic:?}").to_ascii_lowercase(),
                         args: vec![],
                     }),
                     dst,
                 )
             }
-            Push | Pop | Call | Imul | Cdq | Idiv | Int | Cli | Sti | Not | Neg | Cld | Stosb => {
+            Not | Neg => {
+                let expr = Expr::from_iced(instr, 0);
+                let bin = super::Call {
+                    func: match mnemonic {
+                        Not => "!".into(),
+                        Neg => "-".into(),
+                        _ => unreachable!(),
+                    },
+                    args: vec![expr.clone()],
+                };
+                StmtKind::Set(expr, Expr::from(bin))
+            }
+            Push | Pop | Call | Imul | Cdq | Idiv | Int | Cli | Sti | Cld | Stosb => {
                 StmtKind::Raw(format!("{}", instr))
             }
             m => todo!("{m:?} in {instr}"),
