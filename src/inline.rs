@@ -24,7 +24,10 @@ pub fn inline(blocks: &mut [Block]) {
 
     let mut to_inline = vec![];
     for var in var_defs {
-        let count = *var_uses.get(&var).unwrap();
+        let Some(&count) = var_uses.get(&var) else {
+            eprintln!("BUG: {var} def but not use?");
+            continue;
+        };
         if count == 1 {
             to_inline.push(var);
         }
