@@ -15,21 +15,6 @@ fn xor(stmt: &StmtKind) -> Option<StmtKind> {
     Some(StmtKind::Set(left.clone(), 0.into()))
 }
 
-fn jcxz(stmt: &StmtKind) -> Option<StmtKind> {
-    let StmtKind::Jmp(cond, dst) = stmt else {
-        return None;
-    };
-    let "jcxz" = cond.func.as_str() else {
-        return None;
-    };
-    let cond = Call {
-        func: "=".into(),
-        args: vec!["cx".to_owned().into(), 0.into()],
-    }
-    .into();
-    Some(StmtKind::Jmp(Box::new(cond), dst.clone()))
-}
-
 /// Simplify (test x x) to (cmp x 0).
 /// https://stackoverflow.com/questions/39556649/in-x86-whats-difference-between-test-eax-eax-and-cmp-eax-0
 fn test_to_cmp(stmt: &StmtKind) -> Option<StmtKind> {
@@ -98,7 +83,7 @@ pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
     let mut i = 0;
     'stmt_loop: while i < stmts.len() {
         let stmt = &stmts[i].kind;
-        for func in &[xor, test_to_cmp, jcxz] {
+        for func in &[xor, test_to_cmp] {
             if let Some(s) = func(&stmt) {
                 stmts[i].kind = s;
                 continue 'stmt_loop;

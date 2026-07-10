@@ -226,10 +226,18 @@ impl From<&iced_x86::Instruction> for StmtKind {
                 call.func = "+".into();
                 StmtKind::Set(left, Expr::Call(call))
             }
-            Jmp | Jae | Jb | Je | Jge | Jne | Jle | Jl | Jcxz => {
+            Jmp | Jae | Jb | Je | Jge | Jne | Jle | Jl => {
                 let cond = Box::new(super::Call {
                     func: format!("{mnemonic:?}").to_ascii_lowercase(),
                     args: vec![],
+                });
+                let dst = Expr::from_iced(instr, 0);
+                StmtKind::Jmp(cond, dst)
+            }
+            Jcxz => {
+                let cond = Box::new(super::Call {
+                    func: "=".into(),
+                    args: vec!["cx".to_owned().into(), 0.into()],
                 });
                 let dst = Expr::from_iced(instr, 0);
                 StmtKind::Jmp(cond, dst)
