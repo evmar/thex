@@ -15,6 +15,21 @@ fn xor(stmt: &StmtKind) -> Option<StmtKind> {
     Some(StmtKind::Set(left.clone(), 0.into()))
 }
 
+fn jcxz(stmt: &StmtKind) -> Option<StmtKind> {
+    let StmtKind::Jmp(cond, dst) = stmt else {
+        return None;
+    };
+    let "jcxz" = cond.func.as_str() else {
+        return None;
+    };
+    let cond = Call {
+        func: "=".into(),
+        args: vec!["cx".to_owned().into(), 0.into()],
+    }
+    .into();
+    Some(StmtKind::Jmp(Box::new(cond), dst.clone()))
+}
+
 /// Simplify (test x x) to (cmp x 0).
 /// https://stackoverflow.com/questions/39556649/in-x86-whats-difference-between-test-eax-eax-and-cmp-eax-0
 fn test_to_cmp(stmt: &StmtKind) -> Option<StmtKind> {
@@ -81,16 +96,14 @@ fn cmp_jmp(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
 pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
     let mut stmts = stmts;
     let mut i = 0;
-    while i < stmts.len() {
+    'stmt_loop: while i < stmts.len() {
         let stmt = &stmts[i].kind;
-        if let Some(s) = xor(&stmt) {
-            stmts[i].kind = s;
-            continue;
+        for func in &[xor, test_to_cmp, jcxz] {
+            if let Some(s) = func(&stmt) {
+                stmts[i].kind = s;
+                continue 'stmt_loop;
+            }
         }
-        if let Some(s) = test_to_cmp(&stmt) {
-            stmts[i].kind = s;
-        }
-        let stmt = &stmts[i].kind;
 
         if i + 1 < stmts.len() {
             let next = &stmts[i + 1].kind;
@@ -162,6 +175,15 @@ mod tests {
         (jmp (jne) 0x4)
         (jmp (!= eax 0x0) 0x4)
         ");
+        Ok(())
+    }
+
+    #[test]
+    fn test_jecxz() -> anyhow::Result<()> {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(32)?;
+        a.jcxz(4)?;
+        insta::assert_snapshot!(simp(a.instructions()), @"(jmp (= cx 0x0) 0x4)");
         Ok(())
     }
 }
