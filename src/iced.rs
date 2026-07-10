@@ -1,0 +1,202 @@
+//! Conversion from iced_x86 types to ast types.
+//!
+//! Includes the main "x86 opcode to AST statement" logic.
+
+use crate::ast::{Call, Expr, Stmt, StmtKind, Var};
+
+fn var_from_iced(instr: &iced_x86::Instruction, op: u32) -> Var {
+    use iced_x86::OpKind::*;
+    match instr.op_kind(op) {
+        Register => Var::new(format!("{:?}", instr.op_register(op)).to_ascii_lowercase()),
+        k => todo!("{k:?}"),
+    }
+}
+
+impl Expr {
+    fn from_memory(instr: &iced_x86::Instruction) -> Self {
+        let mut args = Vec::new();
+        match instr.memory_segment() {
+            iced_x86::Register::CS | iced_x86::Register::DS | iced_x86::Register::SS => {}
+            r @ iced_x86::Register::FS => args.push(Expr::from(r)),
+            iced_x86::Register::None => {}
+            r => todo!("{r:?}"),
+        }
+
+        match instr.memory_base() {
+            iced_x86::Register::None => {}
+            r => args.push(Expr::from(r)),
+        }
+
+        if instr.memory_index() != iced_x86::Register::None {
+            let mut expr = Expr::from(instr.memory_index());
+            if instr.memory_index_scale() != 1 {
+                expr = Expr::Call(Box::new(Call {
+                    func: "*".into(),
+                    args: vec![expr, Expr::Val(instr.memory_index_scale())],
+                }));
+            }
+            args.push(expr);
+        }
+
+        let offset = instr.memory_displacement32();
+        if offset != 0 {
+            args.push(Expr::Val(offset));
+        }
+
+        Expr::Call(Box::new(Call {
+            func: "mem".into(),
+            args,
+        }))
+    }
+
+    fn from_iced(instr: &iced_x86::Instruction, op: u32) -> Self {
+        use iced_x86::OpKind::*;
+        match instr.op_kind(op) {
+            Immediate8 => Expr::Val(instr.immediate8() as u32),
+            Immediate8to16 => Expr::Val(instr.immediate8to16() as u32),
+            Immediate8to32 => Expr::Val(instr.immediate8to32() as u32),
+            Immediate16 => Expr::Val(instr.immediate16() as u32),
+            Immediate32 => Expr::Val(instr.immediate32()),
+            NearBranch16 => Expr::Val(instr.near_branch16() as u32),
+            NearBranch32 => Expr::Val(instr.near_branch32()),
+            Register => Expr::Var(var_from_iced(instr, op)),
+            Memory => Self::from_memory(instr),
+            k => todo!("{k:?}"),
+        }
+    }
+}
+
+impl From<iced_x86::Register> for Expr {
+    fn from(reg: iced_x86::Register) -> Self {
+        format!("{reg:?}").to_ascii_lowercase().into()
+    }
+}
+
+impl From<&iced_x86::Instruction> for Stmt {
+    fn from(instr: &iced_x86::Instruction) -> Self {
+        Stmt {
+            ip: instr.ip32(),
+            kind: StmtKind::from(instr),
+        }
+    }
+}
+
+impl From<&iced_x86::Instruction> for StmtKind {
+    fn from(instr: &iced_x86::Instruction) -> Self {
+        use iced_x86::Mnemonic::*;
+        let mnemonic = instr.mnemonic();
+        match mnemonic {
+            Mov => {
+                let var = Expr::from_iced(instr, 0);
+                let expr = Expr::from_iced(instr, 1);
+                StmtKind::Set(var, expr)
+            }
+            Inc | Dec => {
+                let expr = Expr::from_iced(instr, 0);
+                let bin = super::Call {
+                    func: match mnemonic {
+                        Inc => "+".into(),
+                        Dec => "-".into(),
+                        _ => unreachable!(),
+                    },
+                    args: vec![expr.clone(), Expr::Val(1)],
+                };
+                StmtKind::Set(expr, Expr::from(bin))
+            }
+            Cmp | Test => {
+                let left = Expr::from_iced(instr, 0);
+                let right = Expr::from_iced(instr, 1);
+                let func = match mnemonic {
+                    Cmp => "cmp",
+                    Test => "test",
+                    _ => unreachable!(),
+                }
+                .into();
+                let bin = super::Call {
+                    func,
+                    args: vec![left, right],
+                };
+                StmtKind::Do(Expr::from(bin))
+            }
+            Add | Shl | Sub | Xor | Sar | And => {
+                let left = Expr::from_iced(instr, 0);
+                let right = Expr::from_iced(instr, 1);
+                let func = match mnemonic {
+                    Add => "+",
+                    Shl => "<<",
+                    Sar => ">>",
+                    Sub => "-",
+                    Xor => "^",
+                    And => "&",
+                    _ => unreachable!(),
+                }
+                .into();
+                let bin = super::Call {
+                    func,
+                    args: vec![left.clone(), right],
+                };
+                StmtKind::Set(left, Expr::from(bin))
+            }
+            Lea => {
+                let left = Expr::from_iced(instr, 0);
+                let right = Expr::from_iced(instr, 1);
+                let Expr::Call(mut call) = right else {
+                    unreachable!()
+                };
+                assert_eq!(call.func, "mem");
+                call.func = "+".into();
+                StmtKind::Set(left, Expr::Call(call))
+            }
+            Jmp | Jae | Jb | Je | Jge | Jne | Jle | Jl => {
+                let cond = Box::new(super::Call {
+                    func: format!("{mnemonic:?}").to_ascii_lowercase(),
+                    args: vec![],
+                });
+                let dst = Expr::from_iced(instr, 0);
+                StmtKind::Jmp(cond, dst)
+            }
+            Jcxz => {
+                let cond = Box::new(super::Call {
+                    func: "=".into(),
+                    args: vec!["cx".to_owned().into(), 0.into()],
+                });
+                let dst = Expr::from_iced(instr, 0);
+                StmtKind::Jmp(cond, dst)
+            }
+            Ret | Retf => {
+                let dst = Expr::Todo("stack ref".into());
+                StmtKind::Jmp(
+                    Box::new(super::Call {
+                        func: format!("{mnemonic:?}").to_ascii_lowercase(),
+                        args: vec![],
+                    }),
+                    dst,
+                )
+            }
+            Not | Neg => {
+                let expr = Expr::from_iced(instr, 0);
+                let bin = super::Call {
+                    func: match mnemonic {
+                        Not => "!".into(),
+                        Neg => "-".into(),
+                        _ => unreachable!(),
+                    },
+                    args: vec![expr.clone()],
+                };
+                StmtKind::Set(expr, Expr::from(bin))
+            }
+            Call => {
+                let expr = Expr::from_iced(instr, 0);
+                let call = super::Call {
+                    func: "call".into(),
+                    args: vec![expr.clone()],
+                };
+                StmtKind::Do(call.into())
+            }
+            Push | Pop | Imul | Cdq | Idiv | Int | Cli | Sti | Cld | Stosb => {
+                StmtKind::Raw(format!("{}", instr))
+            }
+            m => todo!("{m:?} in {instr}"),
+        }
+    }
+}
