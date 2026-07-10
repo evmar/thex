@@ -62,11 +62,14 @@ fn cmp_jmp(stmts: (&StmtKind, &StmtKind)) -> Option<StmtKind> {
     let jmp = cond.func.as_str();
     assert!(cond.args.is_empty());
 
+    // TODO: signedness
     let func = match jmp {
         "je" => "=",
         "jne" => "!=",
         "jge" => ">=",
+        "jae" => ">=",
         "jl" => "<",
+        "jb" => "<",
         "jle" => "<=",
         _ => return None,
     };
