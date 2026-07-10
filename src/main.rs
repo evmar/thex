@@ -10,6 +10,14 @@ use simp::simp;
 
 use crate::inline::inline;
 
+/// asm explorer
+#[derive(argh::FromArgs)]
+struct Args {
+    /// which snippet to render
+    #[argh(option)]
+    snippet: usize,
+}
+
 #[derive(Clone, Copy)]
 pub enum IP {
     Abs(u32),
@@ -33,7 +41,9 @@ impl IP {
 }
 
 fn main() {
-    print_assembly(&P2);
+    let args: Args = argh::from_env();
+    let snippet = [&P1, &P2, &P3, &P4, &P5][args.snippet];
+    print_assembly(snippet);
 }
 
 fn print_assembly(snippet: &Snippet) {

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.103"
+argh = "0.1.19"
 smol_str = "0.3.6"
 
 [dependencies.iced-x86]
