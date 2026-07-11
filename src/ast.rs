@@ -59,6 +59,19 @@ impl From<Call> for Expr {
     }
 }
 
+impl Expr {
+    pub fn call(func: impl Into<String>, args: Vec<Expr>) -> Self {
+        Expr::Call(
+            Call {
+                func: func.into(),
+                args,
+            }
+            .into(),
+        )
+    }
+}
+
+#[derive(Clone)]
 pub struct Stmt {
     /// Instruction addresses represented by this statement, in source order.
     pub ip: Vec<u32>,
@@ -77,6 +90,7 @@ impl std::fmt::Display for Stmt {
     }
 }
 
+#[derive(Clone)]
 pub enum StmtKind {
     Do(Expr),
     Set(Expr, Expr),

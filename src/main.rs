@@ -1,4 +1,5 @@
 mod ast;
+mod expand;
 mod iced;
 mod inline;
 mod simp;
@@ -6,6 +7,7 @@ mod ssa;
 mod union;
 
 use ast::*;
+use expand::expand;
 use iced_x86::{Decoder, DecoderOptions};
 use simp::simp;
 
@@ -72,6 +74,7 @@ fn analyze(snippet: &Snippet) -> (Vec<iced_x86::Instruction>, Vec<Block>) {
             kind: StmtKind::from(instr),
         })
         .collect();
+    let stmts = expand(stmts);
     let stmts = simp(stmts);
     let mut blocks = ssa::ssa(stmts);
     inline(&mut blocks);
