@@ -109,8 +109,9 @@ body {{ background-color: Canvas; color: CanvasText; color-scheme: light dark; }
 
     println!("<pre>");
     for block in blocks {
+        println!("{:08x}:", block.ip);
         for stmt in &block.stmts {
-            println!("{}", stmt);
+            println!("  {}", stmt.kind);
         }
         println!();
     }
