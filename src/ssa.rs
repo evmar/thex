@@ -1,9 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::{
-    ast::{Expr, Stmt, StmtKind, Var, visit_stmt_expr},
-    union::Union,
-};
+use crate::ast::{Call, Expr, Stmt, StmtKind, Var, visit_stmt_expr};
 
 pub struct Block {
     pub ip: u32,
@@ -70,98 +67,144 @@ impl Syms {
 }
 
 fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashMap<Var, Var>, HashMap<Var, Var>) {
-    let mut ins: HashMap<Var, Var> = HashMap::new();
-    let mut new_vars: HashMap<Var, Var> = HashMap::new();
+    let mut reads: HashMap<Var, Var> = HashMap::new();
+    let mut writes: HashMap<Var, Var> = HashMap::new();
     for stmt in block.stmts.iter_mut() {
         visit_stmt_expr(stmt, &mut |expr| {
             let Expr::Var(var) = expr else {
                 return;
             };
-            match new_vars.get(var) {
+            match writes.get(var) {
                 Some(new_var) => *var = new_var.clone(),
                 None => {
-                    // read of new variable means it's a block input
+                    // read of var we haven't written means it's a block input
                     let new_var = syms.next(var);
-                    ins.insert(var.clone(), new_var.clone()); // never overwritten
-                    new_vars.insert(var.clone(), new_var.clone()); // may be overwritten
+                    reads.insert(var.clone(), new_var.clone()); // never overwritten
+                    writes.insert(var.clone(), new_var.clone()); // may be overwritten
                     *var = new_var;
                 }
             }
         });
         if let StmtKind::Set(Expr::Var(var), _) = &mut stmt.kind {
             let new_var = syms.next(var);
-            new_vars.insert(var.clone(), new_var.clone());
+            writes.insert(var.clone(), new_var.clone());
             *var = new_var;
         }
     }
 
-    (ins, new_vars)
+    (reads, writes)
 }
 
-fn links(blocks: &[Block], block: usize) -> Vec<usize> {
+fn nexts(blocks: &[Block], block: usize) -> impl Iterator<Item = usize> {
+    let mut fallthrough = Some(block + 1);
+
     let last = blocks[block].stmts.last().unwrap();
-    let mut nexts = vec![];
-    if let StmtKind::Jmp(cond, dst) = &last.kind {
+    let jmp = if let StmtKind::Jmp(cond, dst) = &last.kind {
+        if cond.func == "jmp" || cond.func == "ret" {
+            fallthrough = None;
+        }
         if let Expr::Val(addr) = dst {
-            let next = blocks.iter().position(|b| b.ip == *addr).unwrap();
-            nexts.push(next);
+            Some(blocks.iter().position(|b| b.ip == *addr).unwrap())
         } else {
             // uhoh
+            None
         }
-        if cond.func == "jmp" || cond.func == "ret" {
-            return nexts;
-        }
-    }
-    nexts.push(block + 1);
-    nexts
+    } else {
+        None
+    };
+    [fallthrough, jmp].into_iter().filter_map(|x| x)
 }
 
 pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
     let mut blocks = blocks(stmts);
 
+    let mut block_preds = Vec::<Vec<usize>>::new();
+    block_preds.resize_with(blocks.len(), Default::default);
+    for src in 0..blocks.len() {
+        for dst in nexts(&blocks, src) {
+            block_preds[dst].push(src);
+        }
+    }
+
     let mut syms = Syms::default();
-    let mut block_ins: Vec<HashMap<Var, (Var, HashSet<Var>)>> = vec![];
+    let mut block_ins: Vec<HashMap<Var, Var>> = vec![];
     let mut block_outs: Vec<HashMap<Var, Var>> = vec![];
     for block in blocks.iter_mut() {
         let (ins, outs) = ssa_names(block, &mut syms);
-        block_ins.push(
-            ins.into_iter()
-                .map(|(var, new_var)| (var, (new_var, Default::default())))
-                .collect(),
-        );
+        block_ins.push(ins);
         block_outs.push(outs);
     }
 
+    // If block A -> block B, and B uses some var not in A, add an entry to A's ins and outs.
+    // Loop until stability.
     loop {
         let mut changed = false;
-
-        for src in 0..blocks.len() {
-            for dst in links(&blocks, src) {
-                let mut passthrough = HashSet::new();
-                for (var, (_, vars)) in &mut block_ins[dst] {
-                    if let Some(out_var) = block_outs[src].get(var) {
-                        if vars.insert(out_var.clone()) {
-                            changed = true;
-                        }
-                    } else {
-                        passthrough.insert(var.clone());
-                    }
+        for (cur, _) in blocks.iter().enumerate() {
+            for &prev in block_preds[cur].iter() {
+                if cur == prev {
+                    continue;
                 }
-
-                for var in passthrough {
-                    let new_var = syms.next(&var);
-                    block_ins[src].insert(var.clone(), (new_var.clone(), HashSet::new()));
-                    block_outs[src].insert(var, new_var);
-                    changed = true;
+                let [ins, prev_ins] = block_ins.get_disjoint_mut([cur, prev]).unwrap();
+                let prev_outs = &mut block_outs[prev];
+                for var in ins.keys() {
+                    if prev_outs.get(var).is_none() {
+                        let new_var = syms.next(var);
+                        prev_ins.insert(var.clone(), new_var.clone());
+                        prev_outs.insert(var.clone(), new_var.clone());
+                        changed = true;
+                    }
                 }
             }
         }
-
         if !changed {
             break;
         }
     }
 
+    let mut phis: HashMap<Var, Vec<Var>> = HashMap::new();
+    for (cur, ins) in block_ins.iter().enumerate() {
+        for (var, new) in ins.iter() {
+            let phi = phis.entry(new.clone()).or_insert_with(Default::default);
+            for &prev in block_preds[cur].iter() {
+                let out = block_outs[prev].get(var).unwrap();
+                phi.push(out.clone());
+            }
+            //eprintln!("{new}: {phi:?}");
+        }
+    }
+
+    for (cur, ins) in block_ins.iter().enumerate() {
+        for (var, new) in ins.iter() {
+            let phi = phis.get(new).unwrap();
+            let val: Expr = match phi.len() {
+                0 => Call {
+                    func: "todo".into(), // var is input to whole program (or a bug)
+                    args: vec![var.clone().into()],
+                }
+                .into(),
+                1 => phi[0].clone().into(),
+                _ => Call {
+                    func: "phi".into(),
+                    args: phi.iter().map(|var| var.clone().into()).collect(),
+                }
+                .into(),
+            };
+
+            blocks[cur].stmts.insert(
+                0,
+                Stmt {
+                    ip: vec![],
+                    kind: StmtKind::Set(new.clone().into(), val),
+                },
+            );
+        }
+    }
+
+    blocks
+}
+
+/*
+fn rename() {
     // The entry point block includes the original register values as inputs.
     for (var, (_, vars)) in block_ins[0].iter_mut() {
         vars.insert(var.clone());
@@ -200,6 +243,7 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
 
     blocks
 }
+*/
 
 #[cfg(test)]
 mod tests {

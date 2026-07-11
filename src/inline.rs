@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{Expr, StmtKind, Var, visit_stmt_expr},
+    ast::{Expr, Stmt, StmtKind, Var, visit_stmt_expr},
     simp,
     ssa::Block,
 };
@@ -35,21 +35,30 @@ pub fn inline(blocks: &mut [Block]) {
     }
 
     for inline_var in to_inline {
-        for block in blocks.iter_mut() {
-            let Some(i) = block.stmts.iter().position(|stmt| {
-                let StmtKind::Set(Expr::Var(var), _) = &stmt.kind else {
-                    return false;
-                };
-                *var == inline_var
-            }) else {
-                continue;
-            };
-            let stmt = block.stmts.remove(i);
-            let ip = stmt.ip;
-            let StmtKind::Set(_, val) = stmt.kind else {
-                unreachable!();
-            };
-            for stmt in block.stmts[i..].iter_mut() {
+        // Find the statement that defines this variable and remove it.
+        let stmt = blocks
+            .iter_mut()
+            .find_map(|block| {
+                let i = block.stmts.iter().position(|stmt| {
+                    let StmtKind::Set(Expr::Var(var), _) = &stmt.kind else {
+                        return false;
+                    };
+                    *var == inline_var
+                })?;
+                Some(block.stmts.remove(i))
+            })
+            .unwrap();
+
+        let Stmt {
+            ip,
+            kind: StmtKind::Set(_, val),
+        } = stmt
+        else {
+            unreachable!()
+        };
+
+        'inline_target: for block in blocks.iter_mut() {
+            for stmt in block.stmts.iter_mut() {
                 let mut inlined = false;
                 visit_stmt_expr(stmt, &mut |expr| {
                     let Expr::Var(var) = expr else {
@@ -66,10 +75,10 @@ pub fn inline(blocks: &mut [Block]) {
                             *expr = new;
                         }
                     });
-                    stmt.ip.splice(0..0, ip.iter().copied());
+                    stmt.ip.splice(0..0, ip);
+                    break 'inline_target;
                 }
             }
-            break;
         }
     }
 }
