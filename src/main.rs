@@ -18,9 +18,9 @@ struct Args {
     #[argh(option)]
     snippet: usize,
 
-    /// html output
+    /// json output
     #[argh(switch)]
-    html: bool,
+    json: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -49,8 +49,8 @@ fn main() {
     let args: Args = argh::from_env();
     let snippet = [&P1, &P2, &P3, &P4, &P5][args.snippet];
     let (instrs, blocks) = analyze(snippet);
-    if args.html {
-        html(&instrs, &blocks);
+    if args.json {
+        json(&instrs, &blocks);
     } else {
         print(&instrs, &blocks);
     }
@@ -92,30 +92,32 @@ fn print(instrs: &[iced_x86::Instruction], blocks: &[Block]) {
     }
 }
 
-fn html(instrs: &[iced_x86::Instruction], blocks: &[Block]) {
-    println!(
-        "<style>
-body {{ background-color: Canvas; color: CanvasText; color-scheme: light dark; }}
-</style>
-    "
-    );
-    println!("<div style='display:flex'>");
-
-    println!("<pre>");
-    for instr in instrs {
-        println!("{:08x} {}", instr.ip32(), instr);
+fn json(instrs: &[iced_x86::Instruction], blocks: &[Block]) {
+    #[derive(serde::Serialize)]
+    struct JSON {
+        instrs: Vec<(u32, String)>,
+        blocks: Vec<(u32, Vec<(Vec<u32>, String)>)>,
     }
-    println!("</pre>");
 
-    println!("<pre>");
-    for block in blocks {
-        println!("{:08x}:", block.ip);
-        for stmt in &block.stmts {
-            println!("  {}", stmt.kind);
-        }
-        println!();
-    }
-    println!("</pre>");
+    let json = serde_json::to_string_pretty(&JSON {
+        instrs: instrs
+            .iter()
+            .map(|instr| (instr.ip32(), format!("{instr}")))
+            .collect(),
+        blocks: blocks
+            .iter()
+            .map(|block| {
+                let stmts = block
+                    .stmts
+                    .iter()
+                    .map(|stmt| (stmt.ip.clone(), format!("{}", stmt.kind)))
+                    .collect();
+                (block.ip, stmts)
+            })
+            .collect(),
+    })
+    .unwrap();
+    println!("{json}");
 }
 
 struct Snippet {

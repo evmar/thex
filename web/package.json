@@ -1,0 +1,9 @@
+{
+  "name": "web",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "preact": "^10.29.7"
+  }
+}
