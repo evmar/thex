@@ -19,7 +19,7 @@ function Body() {
     setHighlight(ips);
   }
 
-  return <main style='display:flex'>
+  return <main style='display:flex; gap: 4em'>
     <pre>
       {data.instrs.map(([ip, instr]) => {
         let className;
