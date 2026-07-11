@@ -49,7 +49,7 @@ impl IP {
 
 fn main() {
     let args: Args = argh::from_env();
-    let snippet = [&P1, &P2, &P3, &P4, &P5][args.snippet];
+    let snippet = [&P1, &P2, &P3, &P4, &P5][args.snippet - 1];
     let (instrs, blocks) = analyze(snippet);
     if args.json {
         json(&instrs, &blocks);
