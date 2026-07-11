@@ -1,5 +1,44 @@
 use crate::ast::{Call, Expr, Stmt, StmtKind};
 
+/// Simplify a series of adds or subs with constants.
+pub fn math_constants(expr: &Expr) -> Option<Expr> {
+    fn constant(expr: &Expr) -> Option<(&Expr, i32)> {
+        let Expr::Call(call) = expr else {
+            return None;
+        };
+        let sign = match call.func.as_str() {
+            "+" => 1,
+            "-" => -1,
+            _ => return None,
+        };
+        let [left, right] = call.args.as_slice() else {
+            return None;
+        };
+        let Expr::Val(val) = right else { return None };
+        Some((left, *val as i32 * sign))
+    }
+
+    let (expr, c1) = constant(expr)?;
+    let (expr, c2) = constant(expr)?;
+    let reduced = c1 + c2;
+    let expr = if reduced > 0 {
+        Call {
+            func: "+".into(),
+            args: vec![expr.clone(), (reduced as u32).into()],
+        }
+        .into()
+    } else if reduced < 0 {
+        Call {
+            func: "-".into(),
+            args: vec![expr.clone(), (-reduced as u32).into()],
+        }
+        .into()
+    } else {
+        expr.clone()
+    };
+    Some(expr)
+}
+
 /// Simplify `xor eax, eax` => setting eax to 0.
 fn xor(stmt: &StmtKind) -> Option<StmtKind> {
     let StmtKind::Set(left, Expr::Call(call)) = stmt else {

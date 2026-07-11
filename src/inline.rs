@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{Expr, StmtKind, Var, visit_stmt_expr},
+    simp,
     ssa::Block,
 };
 
@@ -60,6 +61,11 @@ pub fn inline(blocks: &mut [Block]) {
                     }
                 });
                 if inlined {
+                    visit_stmt_expr(stmt, &mut |expr| {
+                        if let Some(new) = simp::math_constants(expr) {
+                            *expr = new;
+                        }
+                    });
                     stmt.ip.splice(0..0, ip.iter().copied());
                 }
             }
