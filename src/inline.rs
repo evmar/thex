@@ -43,20 +43,59 @@ pub fn inline(blocks: &mut [Block]) {
             }) else {
                 continue;
             };
-            let StmtKind::Set(_, val) = block.stmts.remove(i).kind else {
+            let stmt = block.stmts.remove(i);
+            let ip = stmt.ip;
+            let StmtKind::Set(_, val) = stmt.kind else {
                 unreachable!();
             };
             for stmt in block.stmts[i..].iter_mut() {
+                let mut inlined = false;
                 visit_stmt_expr(stmt, &mut |expr| {
                     let Expr::Var(var) = expr else {
                         return;
                     };
                     if *var == inline_var {
                         *expr = val.clone();
+                        inlined = true;
                     }
                 });
+                if inlined {
+                    stmt.ip.splice(0..0, ip.iter().copied());
+                }
             }
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Stmt;
+
+    #[test]
+    fn combines_ips_when_inlining() {
+        let mut blocks = vec![Block {
+            ip: 0x10,
+            stmts: vec![
+                Stmt {
+                    ip: vec![0x10],
+                    kind: StmtKind::Set("x".into(), 1.into()),
+                },
+                Stmt {
+                    ip: vec![0x12],
+                    kind: StmtKind::Do("x".into()),
+                },
+            ],
+        }];
+
+        inline(&mut blocks);
+
+        assert_eq!(blocks[0].stmts.len(), 1);
+        assert_eq!(blocks[0].stmts[0].ip, vec![0x10, 0x12]);
+        assert!(matches!(
+            blocks[0].stmts[0].kind,
+            StmtKind::Do(Expr::Val(1))
+        ));
     }
 }

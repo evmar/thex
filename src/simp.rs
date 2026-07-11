@@ -94,7 +94,8 @@ pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
             let next = &stmts[i + 1].kind;
             if let Some(s) = cmp_jmp((&stmt, &next)) {
                 stmts[i].kind = s;
-                stmts.remove(i + 1);
+                let next = stmts.remove(i + 1);
+                stmts[i].ip.extend(next.ip);
                 continue;
             }
         }
@@ -144,6 +145,20 @@ mod tests {
         (jmp (= eax ebx) 0x4)
         (jmp (!= eax ebx) 0x4)
         ");
+        Ok(())
+    }
+
+    #[test]
+    fn cmp_jmp_combines_ips() -> anyhow::Result<()> {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(32)?;
+        a.cmp(eax, ebx)?;
+        a.je(4)?;
+        let instrs = a.instructions();
+
+        let stmts = super::simp(instrs.iter().map(Stmt::from).collect());
+
+        assert_eq!(stmts[0].ip, vec![instrs[0].ip32(), instrs[1].ip32()]);
         Ok(())
     }
 

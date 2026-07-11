@@ -75,7 +75,7 @@ impl From<iced_x86::Register> for Expr {
 impl From<&iced_x86::Instruction> for Stmt {
     fn from(instr: &iced_x86::Instruction) -> Self {
         Stmt {
-            ip: instr.ip32(),
+            ip: vec![instr.ip32()],
             kind: StmtKind::from(instr),
         }
     }

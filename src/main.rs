@@ -68,7 +68,7 @@ fn analyze(snippet: &Snippet) -> (Vec<iced_x86::Instruction>, Vec<Block>) {
     let stmts: Vec<Stmt> = instrs
         .iter()
         .map(|instr| Stmt {
-            ip: instr.ip32(),
+            ip: vec![instr.ip32()],
             kind: StmtKind::from(instr),
         })
         .collect();

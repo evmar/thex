@@ -60,13 +60,20 @@ impl From<Call> for Expr {
 }
 
 pub struct Stmt {
-    pub ip: u32,
+    /// Instruction addresses represented by this statement, in source order.
+    pub ip: Vec<u32>,
     pub kind: StmtKind,
 }
 
 impl std::fmt::Display for Stmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:08x} {}", self.ip, self.kind)
+        for (i, ip) in self.ip.iter().enumerate() {
+            if i > 0 {
+                write!(f, ",")?;
+            }
+            write!(f, "{ip:08x}")?;
+        }
+        write!(f, " {}", self.kind)
     }
 }
 

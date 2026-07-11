@@ -13,7 +13,7 @@ pub struct Block {
 impl From<Vec<Stmt>> for Block {
     fn from(stmts: Vec<Stmt>) -> Self {
         Block {
-            ip: stmts[0].ip,
+            ip: stmts[0].ip[0],
             stmts,
         }
     }
@@ -39,7 +39,7 @@ fn blocks(stmts: Vec<Stmt>) -> Vec<Block> {
                     break;
                 };
                 if let Some(next) = stmts.peek() {
-                    if jmp_targets.contains(&next.ip) {
+                    if next.ip.iter().any(|ip| jmp_targets.contains(ip)) {
                         break;
                     }
                 };
@@ -53,7 +53,7 @@ fn blocks(stmts: Vec<Stmt>) -> Vec<Block> {
     });
 
     it.map(|stmts| Block {
-        ip: stmts[0].ip,
+        ip: stmts[0].ip[0],
         stmts,
     })
     .collect()
