@@ -93,6 +93,12 @@ fn print(instrs: &[iced_x86::Instruction], blocks: &[Block]) {
 }
 
 fn html(instrs: &[iced_x86::Instruction], blocks: &[Block]) {
+    println!(
+        "<style>
+body {{ background-color: Canvas; color: CanvasText; color-scheme: light dark; }}
+</style>
+    "
+    );
     println!("<div style='display:flex'>");
 
     println!("<pre>");
