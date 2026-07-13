@@ -28,7 +28,13 @@ pub enum Expr {
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expr::Val(val) => write!(f, "{val:#x}"),
+            Expr::Val(val) => {
+                if *val < 10 {
+                    write!(f, "{val}")
+                } else {
+                    write!(f, "{val:#x}")
+                }
+            }
             Expr::Var(var) => write!(f, "{var}"),
             Expr::Call(op) => write!(f, "{op}"),
             Expr::Todo(msg) => write!(f, "(todo {msg:?})"),

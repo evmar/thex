@@ -167,7 +167,7 @@ mod tests {
         a.xor(ebx, ebx)?; // simp
         insta::assert_snapshot!(simp(a.instructions()), @"
         (set eax (^ eax ebx))
-        (set ebx 0x0)
+        (set ebx 0)
         ");
         Ok(())
     }
@@ -181,8 +181,8 @@ mod tests {
         a.cmp(eax, ebx)?;
         a.jne(4)?;
         insta::assert_snapshot!(simp(a.instructions()), @"
-        (jmp (= eax ebx) 0x4)
-        (jmp (!= eax ebx) 0x4)
+        (jmp (= eax ebx) 4)
+        (jmp (!= eax ebx) 4)
         ");
         Ok(())
     }
@@ -211,8 +211,8 @@ mod tests {
         a.jne(4)?;
         insta::assert_snapshot!(simp(a.instructions()), @"
         (test eax ebx)
-        (jmp (jne) 0x4)
-        (jmp (!= eax 0x0) 0x4)
+        (jmp (jne) 4)
+        (jmp (!= eax 0) 4)
         ");
         Ok(())
     }
@@ -222,7 +222,7 @@ mod tests {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(32)?;
         a.jcxz(4)?;
-        insta::assert_snapshot!(simp(a.instructions()), @"(jmp (= cx 0x0) 0x4)");
+        insta::assert_snapshot!(simp(a.instructions()), @"(jmp (= cx 0) 4)");
         Ok(())
     }
 }
