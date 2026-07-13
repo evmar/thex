@@ -3,6 +3,7 @@ import * as hooks from 'preact/hooks';
 import data_json from './data.json';
 
 interface DataJSON {
+  name: string,
   instrs: Array<[number, string]>,
   blocks: Array<[number, Array<[[number], string]>]>,
 }
@@ -19,7 +20,9 @@ function Body() {
     setHighlight(ips);
   }
 
-  return <main style='display:flex; gap: 4em'>
+  return <main>
+    <div>{data.name}</div>
+    <div style='display:flex; gap: 4em'>
     <pre>
       {data.instrs.map(([ip, instr]) => {
         let className;
@@ -42,7 +45,8 @@ function Body() {
           })}
         </div>;
       })}
-    </pre>
+      </pre>
+  </div>
   </main>;
 }
 

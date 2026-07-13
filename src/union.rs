@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::collections::{HashMap, HashSet};
 
 pub struct Union<T>(HashMap<T, T>);
