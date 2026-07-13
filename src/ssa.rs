@@ -290,4 +290,75 @@ mod tests {
         ");
         Ok(())
     }
+
+    fn ssa(instrs: &[iced_x86::Instruction]) -> anyhow::Result<String> {
+        use std::fmt::Write;
+        let block = instrs.into_iter().map(Stmt::from).collect::<Vec<_>>();
+        let blocks = super::ssa(block);
+        let mut out = String::new();
+        for block in blocks {
+            writeln!(&mut out, "{:x}:", block.ip)?;
+            for stmt in block.stmts {
+                writeln!(&mut out, "{}", stmt.kind)?;
+            }
+        }
+        Ok(out)
+    }
+
+    #[test]
+    fn simple() -> anyhow::Result<()> {
+        let code = {
+            use iced_x86::code_asm::*;
+            let mut a = CodeAssembler::new(32)?;
+            a.mov(ax, 0)?;
+            let mut b1 = a.create_label();
+            a.set_label(&mut b1)?;
+            a.add(ax, 1)?;
+            a.jmp(b1)?;
+            a.take_instructions()
+        };
+        insta::assert_snapshot!(ssa(&code)?, @"
+        0:
+        (set ax1 0)
+        1:
+        (set ax2 (phi ax1 ax3))
+        (set ax3 (+ ax2 1))
+        (jmp (jmp) 1)
+        ");
+        Ok(())
+    }
+
+    #[test]
+    fn two_blocks() -> anyhow::Result<()> {
+        let code = {
+            use iced_x86::code_asm::*;
+            let mut a = CodeAssembler::new(32)?;
+            a.mov(ax, 0)?;
+
+            // ax gets forwarded through this block
+            let mut b1 = a.create_label();
+            a.set_label(&mut b1)?;
+            a.cld()?;
+
+            let mut fwd = a.create_label();
+            a.jmp(fwd)?;
+            a.set_label(&mut fwd)?;
+            a.add(ax, 1)?;
+            a.jmp(b1)?;
+            a.take_instructions()
+        };
+        insta::assert_snapshot!(ssa(&code)?, @"
+        0:
+        (set ax1 0)
+        1:
+        (set ax4 (phi ax1 ax3))
+        (cld)
+        (jmp (jmp) 2)
+        2:
+        (set ax2 ax4)
+        (set ax3 (+ ax2 1))
+        (jmp (jmp) 1)
+        ");
+        Ok(())
+    }
 }
