@@ -162,6 +162,10 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
     }
 
     let mut phis: HashMap<Var, Vec<Var>> = HashMap::new();
+    for (var, new) in block_ins[0].iter() {
+        phis.insert(new.clone(), vec![format!("{var}_in").into()]);
+    }
+
     for (cur, ins) in block_ins.iter().enumerate() {
         for (var, new) in ins.iter() {
             let phi = phis.entry(new.clone()).or_insert_with(Default::default);
