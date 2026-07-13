@@ -167,6 +167,11 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
             let phi = phis.entry(new.clone()).or_insert_with(Default::default);
             for &prev in block_preds[cur].iter() {
                 let out = block_outs[prev].get(var).unwrap();
+                if out == new {
+                    // if phi references itself, ignore it.
+                    // this is the case where a block loops an unmodified input back to itself.
+                    continue;
+                }
                 phi.push(out.clone());
             }
             //eprintln!("{new}: {phi:?}");
