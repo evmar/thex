@@ -171,14 +171,8 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
             let phi = phis.entry(new.clone()).or_insert_with(Default::default);
             for &prev in block_preds[cur].iter() {
                 let out = block_outs[prev].get(var).unwrap();
-                if out == new {
-                    // if phi references itself, ignore it.
-                    // this is the case where a block loops an unmodified input back to itself.
-                    continue;
-                }
                 phi.push(out.clone());
             }
-            //eprintln!("{new}: {phi:?}");
         }
     }
 
@@ -329,34 +323,48 @@ mod tests {
     }
 
     #[test]
-    fn two_blocks() -> anyhow::Result<()> {
+    fn branch() -> anyhow::Result<()> {
         let code = {
             use iced_x86::code_asm::*;
             let mut a = CodeAssembler::new(32)?;
             a.mov(ax, 0)?;
 
-            // ax gets forwarded through this block
-            let mut b1 = a.create_label();
-            a.set_label(&mut b1)?;
+            let mut top = a.create_label();
+            a.set_label(&mut top)?;
+            let mut br_else = a.create_label();
+
+            a.test(ax, 0)?;
+            a.jnz(br_else)?;
+            let mut br_out = a.create_label();
+
+            a.cld()?;
+            a.jmp(br_out)?;
+
+            a.set_label(&mut br_else)?;
             a.cld()?;
 
-            let mut fwd = a.create_label();
-            a.jmp(fwd)?;
-            a.set_label(&mut fwd)?;
+            a.set_label(&mut br_out)?;
             a.add(ax, 1)?;
-            a.jmp(b1)?;
+            a.jmp(top)?;
             a.take_instructions()
         };
         insta::assert_snapshot!(ssa(&code)?, @"
         0:
         (set ax1 0)
         1:
-        (set ax4 (phi ax1 ax3))
+        (set ax2 (phi ax1 ax4))
+        (test ax2 0)
+        (jmp (jne) 2)
+        0:
+        (set ax5 ax2)
         (cld)
-        (jmp (jmp) 2)
+        (jmp (jmp) 3)
         2:
-        (set ax2 ax4)
-        (set ax3 (+ ax2 1))
+        (set ax6 ax2)
+        (cld)
+        3:
+        (set ax3 (phi ax5 ax6))
+        (set ax4 (+ ax3 1))
         (jmp (jmp) 1)
         ");
         Ok(())
