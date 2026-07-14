@@ -1,6 +1,6 @@
 pub type Var = smol_str::SmolStr;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Call {
     pub func: String,
     pub args: Vec<Expr>,
@@ -17,7 +17,7 @@ impl std::fmt::Display for Call {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
     Val(u32),
     Var(Var),
@@ -82,7 +82,7 @@ impl Expr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Stmt {
     /// Instruction addresses represented by this statement, in source order.
     pub ip: Vec<u32>,
@@ -97,11 +97,14 @@ impl std::fmt::Display for Stmt {
             }
             write!(f, "{ip:08x}")?;
         }
-        write!(f, " {}", self.kind)
+        if self.ip.len() > 0 {
+            write!(f, " ")?;
+        }
+        write!(f, "{}", self.kind)
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StmtKind {
     Do(Expr),
     Set(Expr, Expr),

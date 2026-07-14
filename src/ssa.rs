@@ -2,9 +2,20 @@ use std::collections::HashMap;
 
 use crate::ast::{Call, Expr, Stmt, StmtKind, Var, visit_stmt_expr};
 
+#[derive(Debug)]
 pub struct Block {
     pub ip: u32,
     pub stmts: Vec<Stmt>,
+}
+
+impl std::fmt::Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{:x}:", self.ip)?;
+        for s in self.stmts.iter() {
+            writeln!(f, "{}", s)?;
+        }
+        Ok(())
+    }
 }
 
 impl From<Vec<Stmt>> for Block {

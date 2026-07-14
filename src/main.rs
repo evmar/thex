@@ -6,6 +6,9 @@ mod simp;
 mod ssa;
 mod union;
 
+#[cfg(test)]
+mod parse;
+
 use ast::*;
 use expand::expand;
 use iced_x86::{Decoder, DecoderOptions};

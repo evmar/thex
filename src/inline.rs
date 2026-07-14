@@ -87,6 +87,7 @@ pub fn inline(blocks: &mut [Block]) {
 mod tests {
     use super::*;
     use crate::ast::Stmt;
+    use crate::parse::Parse;
 
     #[test]
     fn combines_ips_when_inlining() {
@@ -95,22 +96,20 @@ mod tests {
             stmts: vec![
                 Stmt {
                     ip: vec![0x10],
-                    kind: StmtKind::Set("x".into(), 1.into()),
+                    kind: StmtKind::must_parse("(set x 1)"),
                 },
                 Stmt {
                     ip: vec![0x12],
-                    kind: StmtKind::Do("x".into()),
+                    kind: StmtKind::must_parse("(foo x)"),
                 },
             ],
         }];
 
         inline(&mut blocks);
 
-        assert_eq!(blocks[0].stmts.len(), 1);
-        assert_eq!(blocks[0].stmts[0].ip, vec![0x10, 0x12]);
-        assert!(matches!(
-            blocks[0].stmts[0].kind,
-            StmtKind::Do(Expr::Val(1))
-        ));
+        insta::assert_snapshot!(format!("{}", blocks.iter().map(|b| format!("{}", b)).collect::<Vec<_>>().join("\n")), @"
+        10:
+        00000010,00000012 (foo 1)
+        ");
     }
 }
