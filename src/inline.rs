@@ -87,20 +87,37 @@ pub fn inline(blocks: &mut [Block]) {
 mod tests {
     use super::*;
     use crate::ast::Stmt;
-    use crate::parse::Parse;
+    use crate::ssa::fmt_blocks;
 
     #[test]
     fn combines_ips_when_inlining() {
-        let mut blocks = vec![Block::from(vec![
-            Stmt::must_parse("1: (set x 1)"),
-            Stmt::must_parse("2: (foo x)"),
-        ])];
+        let mut blocks = vec![Block::from(Stmt::parse_many(
+            "1: (set x 1)
+            2: (foo x)",
+        ))];
 
         inline(&mut blocks);
 
-        insta::assert_snapshot!(format!("{}", blocks.iter().map(|b| format!("{}", b)).collect::<Vec<_>>().join("\n")), @"
-        1:
-        00000001,00000002 (foo 1)
+        insta::assert_snapshot!(fmt_blocks(&blocks), @"00000001,00000002 (foo 1)");
+    }
+
+    #[test]
+    fn inlines_phis() {
+        let stmts = Stmt::parse_many(
+            "0: (set x 1)
+            (jmp (jmp) 1)
+            1: (set y x)
+            (use y)
+            (jmp (jmp) 1)",
+        );
+        let mut blocks = crate::ssa::ssa(stmts);
+        inline(&mut blocks);
+        insta::assert_snapshot!(fmt_blocks(&blocks), @"
+        (jmp (jmp) 1)
+
+        00000000 (set x2 (phi 1 x2))
+        00000001 (use x2)
+        (jmp (jmp) 1)
         ");
     }
 }

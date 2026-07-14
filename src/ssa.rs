@@ -18,6 +18,15 @@ impl std::fmt::Display for Block {
     }
 }
 
+#[cfg(test)]
+pub fn fmt_blocks(blocks: &[Block]) -> String {
+    blocks
+        .iter()
+        .map(|b| format!("{:#}", b))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl From<Vec<Stmt>> for Block {
     fn from(stmts: Vec<Stmt>) -> Self {
         Block {

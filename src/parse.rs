@@ -104,9 +104,25 @@ impl Parse for Stmt {
                 let [a, b] = args.clone().try_into().unwrap();
                 StmtKind::Set(a, b)
             }
+            "jmp" => {
+                eprintln!("args {:?}", args);
+                let [a, b] = args.clone().try_into().unwrap();
+                let Expr::Call(cond) = a else { panic!() };
+                StmtKind::Jmp(cond, b)
+            }
             _ => StmtKind::Do(expr),
         };
         Some(Stmt { ip: ips, kind })
+    }
+}
+
+impl Stmt {
+    pub fn parse_many(text: &str) -> Vec<Stmt> {
+        text.split('\n')
+            .into_iter()
+            .map(str::trim)
+            .map(Stmt::must_parse)
+            .collect()
     }
 }
 
