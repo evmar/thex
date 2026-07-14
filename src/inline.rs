@@ -91,25 +91,16 @@ mod tests {
 
     #[test]
     fn combines_ips_when_inlining() {
-        let mut blocks = vec![Block {
-            ip: 0x10,
-            stmts: vec![
-                Stmt {
-                    ip: vec![0x10],
-                    kind: StmtKind::must_parse("(set x 1)"),
-                },
-                Stmt {
-                    ip: vec![0x12],
-                    kind: StmtKind::must_parse("(foo x)"),
-                },
-            ],
-        }];
+        let mut blocks = vec![Block::from(vec![
+            Stmt::must_parse("1: (set x 1)"),
+            Stmt::must_parse("2: (foo x)"),
+        ])];
 
         inline(&mut blocks);
 
         insta::assert_snapshot!(format!("{}", blocks.iter().map(|b| format!("{}", b)).collect::<Vec<_>>().join("\n")), @"
-        10:
-        00000010,00000012 (foo 1)
+        1:
+        00000001,00000002 (foo 1)
         ");
     }
 }

@@ -43,6 +43,13 @@ impl Parse for Var {
     }
 }
 
+fn whitespace(it: &mut It) -> Option<()> {
+    while *it.peek()? == ' ' {
+        it.next();
+    }
+    Some(())
+}
+
 impl Parse for Call {
     fn parse_it(it: &mut It) -> Option<Self> {
         let '(' = it.next()? else {
@@ -56,9 +63,7 @@ impl Parse for Call {
                 break;
             }
             args.push(<Expr>::parse_it(it).unwrap());
-            while *it.peek()? == ' ' {
-                it.next();
-            }
+            whitespace(it)?;
         }
 
         let Expr::Var(func) = args.remove(0) else {
@@ -82,26 +87,26 @@ impl Parse for Expr {
     }
 }
 
-impl Parse for StmtKind {
+impl Parse for Stmt {
     fn parse_it(it: &mut It) -> Option<Self> {
-        let expr = <Expr>::parse_it(it)?;
+        let mut ips = vec![];
+        let mut expr = <Expr>::parse_it(it)?;
+        if let Expr::Val(ip) = expr {
+            let ':' = it.next().unwrap() else { panic!() };
+            whitespace(it)?;
+            expr = <Expr>::parse_it(it)?;
+            ips.push(ip);
+        };
         let Expr::Call(call) = &expr else { panic!() };
         let Call { func, args } = &**call;
-        let stmt = match func.as_str() {
+        let kind = match func.as_str() {
             "set" => {
                 let [a, b] = args.clone().try_into().unwrap();
                 StmtKind::Set(a, b)
             }
             _ => StmtKind::Do(expr),
         };
-        Some(stmt)
-    }
-}
-
-impl Parse for Stmt {
-    fn parse_it(it: &mut It) -> Option<Self> {
-        let kind = <StmtKind>::parse_it(it)?;
-        Some(Stmt { ip: vec![], kind })
+        Some(Stmt { ip: ips, kind })
     }
 }
 
