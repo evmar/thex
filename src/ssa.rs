@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{Call, Expr, Stmt, StmtKind, Var, visit_stmt_expr};
+use crate::ast::{Call, Expr, Stmt, StmtKind, Var, visit_stmt_expr_mut};
 
 #[derive(Debug)]
 pub struct Block {
@@ -100,7 +100,7 @@ fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashMap<Var, Var>, HashMap<
     let mut reads: HashMap<Var, Var> = HashMap::new();
     let mut writes: HashMap<Var, Var> = HashMap::new();
     for stmt in block.stmts.iter_mut() {
-        visit_stmt_expr(stmt, &mut |expr| {
+        visit_stmt_expr_mut(stmt, &mut |expr| {
             let Expr::Var(var) = expr else {
                 return;
             };

@@ -1,24 +1,24 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{Expr, Stmt, StmtKind, Var, visit_stmt_expr},
+    ast::{Expr, Stmt, StmtKind, Var, visit_stmt_expr, visit_stmt_expr_mut},
     simp,
     ssa::Block,
 };
 
 pub fn inline(blocks: &mut [Block]) {
-    let mut var_defs = HashSet::<Var>::new();
-    let mut var_uses = HashMap::<Var, usize>::new();
-    for block in blocks.iter_mut() {
-        for stmt in block.stmts.iter_mut() {
+    let mut var_defs = HashSet::<&Var>::new();
+    let mut var_uses = HashMap::<&Var, usize>::new();
+    for block in blocks.iter() {
+        for stmt in block.stmts.iter() {
             if let StmtKind::Set(Expr::Var(var), _) = &stmt.kind {
-                var_defs.insert(var.clone());
+                var_defs.insert(var);
             }
             visit_stmt_expr(stmt, &mut |expr| {
                 let Expr::Var(var) = expr else {
                     return;
                 };
-                *var_uses.entry(var.clone()).or_default() += 1;
+                *var_uses.entry(var).or_default() += 1;
             });
         }
     }
@@ -30,7 +30,7 @@ pub fn inline(blocks: &mut [Block]) {
             continue;
         };
         if count == 1 {
-            to_inline.push(var);
+            to_inline.push(var.clone());
         }
     }
 
@@ -60,7 +60,7 @@ pub fn inline(blocks: &mut [Block]) {
         'inline_target: for block in blocks.iter_mut() {
             for stmt in block.stmts.iter_mut() {
                 let mut inlined = false;
-                visit_stmt_expr(stmt, &mut |expr| {
+                visit_stmt_expr_mut(stmt, &mut |expr| {
                     let Expr::Var(var) = expr else {
                         return;
                     };
@@ -70,7 +70,7 @@ pub fn inline(blocks: &mut [Block]) {
                     }
                 });
                 if inlined {
-                    visit_stmt_expr(stmt, &mut |expr| {
+                    visit_stmt_expr_mut(stmt, &mut |expr| {
                         if let Some(new) = simp::math_constants(expr) {
                             *expr = new;
                         }

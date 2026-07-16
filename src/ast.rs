@@ -125,17 +125,17 @@ impl std::fmt::Display for StmtKind {
     }
 }
 
-pub fn visit_expr(expr: &mut Expr, visit: &mut impl FnMut(&mut Expr)) {
+pub fn visit_expr<'a>(expr: &'a Expr, visit: &mut impl FnMut(&'a Expr)) {
     visit(expr);
     if let Expr::Call(call) = expr {
-        for arg in call.args.iter_mut() {
+        for arg in call.args.iter() {
             visit_expr(arg, visit);
         }
     }
 }
 
-pub fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
-    match &mut stmt.kind {
+pub fn visit_stmt_expr<'a>(stmt: &'a Stmt, visit: &mut impl FnMut(&'a Expr)) {
+    match &stmt.kind {
         StmtKind::Do(expr) => visit_expr(expr, visit),
         StmtKind::Set(dst, val) => {
             if let Expr::Var(_) = dst {
@@ -145,10 +145,39 @@ pub fn visit_stmt_expr(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
             visit_expr(val, visit);
         }
         StmtKind::Jmp(cond, dst) => {
-            for arg in cond.args.iter_mut() {
+            for arg in cond.args.iter() {
                 visit_expr(arg, visit);
             }
             visit_expr(dst, visit);
+        }
+        StmtKind::Raw(_) => {}
+    }
+}
+
+pub fn visit_expr_mut(expr: &mut Expr, visit: &mut impl FnMut(&mut Expr)) {
+    visit(expr);
+    if let Expr::Call(call) = expr {
+        for arg in call.args.iter_mut() {
+            visit_expr_mut(arg, visit);
+        }
+    }
+}
+
+pub fn visit_stmt_expr_mut(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
+    match &mut stmt.kind {
+        StmtKind::Do(expr) => visit_expr_mut(expr, visit),
+        StmtKind::Set(dst, val) => {
+            if let Expr::Var(_) = dst {
+            } else {
+                visit_expr_mut(dst, visit);
+            }
+            visit_expr_mut(val, visit);
+        }
+        StmtKind::Jmp(cond, dst) => {
+            for arg in cond.args.iter_mut() {
+                visit_expr_mut(arg, visit);
+            }
+            visit_expr_mut(dst, visit);
         }
         StmtKind::Raw(_) => {}
     }
