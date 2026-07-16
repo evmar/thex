@@ -7,18 +7,18 @@ use crate::{
 };
 
 pub fn inline_once(blocks: &mut [Block]) -> bool {
-    let mut var_defs = HashMap::<&Var, &Expr>::new();
-    let mut var_uses = HashMap::<&Var, usize>::new();
+    let mut var_defs = HashMap::<Var, &Expr>::new();
+    let mut var_uses = HashMap::<Var, usize>::new();
     for block in blocks.iter() {
         for stmt in block.stmts.iter() {
-            if let StmtKind::Set(Expr::Var(var), val) = &stmt.kind {
-                var_defs.insert(var, val);
+            if let StmtKind::Let(var, val) = &stmt.kind {
+                var_defs.insert(*var, val);
             }
             visit_stmt_expr(stmt, &mut |expr| {
                 let Expr::Var(var) = expr else {
                     return;
                 };
-                *var_uses.entry(var).or_default() += 1;
+                *var_uses.entry(*var).or_default() += 1;
             });
         }
     }
@@ -32,9 +32,9 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
             }
             Some(count) => *count,
         };
-        let is_alias = matches!(val, Expr::Var(_));
+        let is_alias = matches!(val, Expr::Name(_));
         if count == 1 || is_alias {
-            to_inline.push(var.clone());
+            to_inline.push(var);
         }
     }
 
@@ -45,7 +45,7 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
             .iter_mut()
             .find_map(|block| {
                 let i = block.stmts.iter().position(|stmt| {
-                    let StmtKind::Set(Expr::Var(var), _) = &stmt.kind else {
+                    let StmtKind::Let(var, _) = &stmt.kind else {
                         return false;
                     };
                     *var == inline_var
@@ -56,7 +56,7 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
 
         let Stmt {
             ip,
-            kind: StmtKind::Set(_, val),
+            kind: StmtKind::Let(_, val),
         } = stmt
         else {
             unreachable!()
@@ -83,7 +83,8 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
                             *expr = new;
                         }
                     });
-                    stmt.ip.splice(0..0, ip.clone());
+                    stmt.ip.extend(ip.clone());
+                    stmt.ip.sort();
                 }
             }
         }
@@ -103,11 +104,11 @@ mod tests {
 
     #[test]
     fn combines_ips_when_inlining() {
-        let mut blocks = vec![Block::from(Stmt::parse_many(
+        let stmts = Stmt::parse_many(
             "1: (set x 1)
             2: (foo x)",
-        ))];
-
+        );
+        let mut blocks = crate::ssa::ssa(stmts);
         inline(&mut blocks);
 
         insta::assert_snapshot!(fmt_blocks(&blocks, true), @"
@@ -132,18 +133,20 @@ mod tests {
         inline(&mut blocks);
         insta::assert_snapshot!(fmt_blocks(&blocks, false), @"
         0:
-        (set x1 1)
+        (let v1 1)
         (jmp (jne) 2)
 
         1:
-        (use x1)
+        (let v3 v1)
+        (use v3)
         (jmp (jmp) 3)
 
         2:
-        (use x1)
+        (let v5 v1)
+        (use v5)
 
         3:
-        (use x1)
+        (use (phi v3 v5))
         ");
     }
 }

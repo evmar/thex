@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{Call, Expr, Stmt, StmtKind, Var, visit_stmt_expr_mut};
+use crate::ast::{Call, Expr, Name, Stmt, StmtKind, Var, visit_stmt_expr_mut};
 
 #[derive(Debug)]
 pub struct Block {
@@ -86,39 +86,43 @@ fn blocks(stmts: Vec<Stmt>) -> Vec<Block> {
     .collect()
 }
 
-#[derive(Default)]
-struct Syms(HashMap<Var, u8>);
-impl Syms {
-    fn next(&mut self, var: &str) -> Var {
-        let next: u8 = self.0.get(var).copied().unwrap_or(0) + 1;
-        self.0.insert(Var::new(var), next);
-        Var::new(format!("{var}{next}"))
-    }
-}
+fn ssa_names(block: &mut Block, next_var: &mut Var) -> (HashMap<Name, Var>, HashMap<Name, Var>) {
+    let mut reads: HashMap<Name, Var> = HashMap::new();
+    let mut writes: HashMap<Name, Var> = HashMap::new();
 
-fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashMap<Var, Var>, HashMap<Var, Var>) {
-    let mut reads: HashMap<Var, Var> = HashMap::new();
-    let mut writes: HashMap<Var, Var> = HashMap::new();
     for stmt in block.stmts.iter_mut() {
+        // set => let
+        // given (set x (some_expr x)) we want the inner x to refer to a previous x,
+        // so convert to let here, then traverse the expression, then update the outer x.
+        let pending = if let StmtKind::Set(Expr::Name(name), val) = &mut stmt.kind {
+            let new_var = *next_var;
+            *next_var = next_var.next();
+            let name = name.clone();
+            stmt.kind = StmtKind::Let(new_var, val.clone());
+            Some((name, new_var))
+        } else {
+            None
+        };
+
         visit_stmt_expr_mut(stmt, &mut |expr| {
-            let Expr::Var(var) = expr else {
+            let Expr::Name(name) = expr else {
                 return;
             };
-            match writes.get(var) {
-                Some(new_var) => *var = new_var.clone(),
+            match writes.get(name) {
+                Some(new_var) => *expr = Expr::Var(*new_var),
                 None => {
-                    // read of var we haven't written means it's a block input
-                    let new_var = syms.next(var);
-                    reads.insert(var.clone(), new_var.clone()); // never overwritten
-                    writes.insert(var.clone(), new_var.clone()); // may be overwritten
-                    *var = new_var;
+                    // read of name we haven't written means it's a block input
+                    let new_var = *next_var;
+                    *next_var = next_var.next();
+                    reads.insert(name.clone(), new_var); // never overwritten
+                    writes.insert(name.clone(), new_var); // may be overwritten
+                    *expr = Expr::Var(new_var);
                 }
             }
         });
-        if let StmtKind::Set(Expr::Var(var), _) = &mut stmt.kind {
-            let new_var = syms.next(var);
-            writes.insert(var.clone(), new_var.clone());
-            *var = new_var;
+
+        if let Some((name, var)) = pending {
+            writes.insert(name, var); // may be overwritten
         }
     }
 
@@ -160,11 +164,11 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
         }
     }
 
-    let mut syms = Syms::default();
-    let mut block_ins: Vec<HashMap<Var, Var>> = vec![];
-    let mut block_outs: Vec<HashMap<Var, Var>> = vec![];
+    let mut next_var = Var(1);
+    let mut block_ins: Vec<HashMap<Name, Var>> = vec![];
+    let mut block_outs: Vec<HashMap<Name, Var>> = vec![];
     for block in blocks.iter_mut() {
-        let (ins, outs) = ssa_names(block, &mut syms);
+        let (ins, outs) = ssa_names(block, &mut next_var);
         block_ins.push(ins);
         block_outs.push(outs);
     }
@@ -182,7 +186,8 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
                 let prev_outs = &mut block_outs[prev];
                 for var in ins.keys() {
                     if prev_outs.get(var).is_none() {
-                        let new_var = syms.next(var);
+                        let new_var = next_var;
+                        next_var = next_var.next();
                         prev_ins.insert(var.clone(), new_var.clone());
                         prev_outs.insert(var.clone(), new_var.clone());
                         changed = true;
@@ -195,17 +200,17 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
         }
     }
 
-    let mut phis: HashMap<Var, Vec<Var>> = HashMap::new();
-    for (var, new) in block_ins[0].iter() {
-        phis.insert(new.clone(), vec![format!("{var}_in").into()]);
+    let mut phis: HashMap<Var, Vec<Expr>> = HashMap::new();
+    for (name, var) in block_ins[0].iter() {
+        phis.insert(*var, vec![format!("{name}_in").into()]);
     }
 
     for (cur, ins) in block_ins.iter().enumerate() {
-        for (var, new) in ins.iter() {
-            let phi = phis.entry(new.clone()).or_insert_with(Default::default);
+        for (name, var) in ins.iter() {
+            let phi = phis.entry(*var).or_insert_with(Default::default);
             for &prev in block_preds[cur].iter() {
-                let out = block_outs[prev].get(var).unwrap();
-                phi.push(out.clone());
+                let out = block_outs[prev].get(name).unwrap();
+                phi.push(Expr::Var(*out));
             }
         }
     }
@@ -231,7 +236,7 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
                 0,
                 Stmt {
                     ip: vec![],
-                    kind: StmtKind::Set(new.clone().into(), val),
+                    kind: StmtKind::Let(*new, val),
                 },
             );
         }
@@ -292,8 +297,8 @@ mod tests {
             .map(Stmt::from)
             .collect::<Vec<_>>()
             .into();
-        let mut syms = Syms::default();
-        super::ssa_names(&mut block, &mut syms);
+        let mut next_sym = Var(1);
+        super::ssa_names(&mut block, &mut next_sym);
         block
             .stmts
             .into_iter()
@@ -306,15 +311,17 @@ mod tests {
     fn names() -> anyhow::Result<()> {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(32)?;
+        a.mov(eax, eax)?;
         a.mov(eax, ebx)?;
         a.mov(ebx, eax)?;
         a.mov(eax, edx)?;
         a.mov(ecx, eax)?;
         insta::assert_snapshot!(ssa_names(a.instructions()), @"
-        (set eax1 ebx1)
-        (set ebx2 eax1)
-        (set eax2 edx1)
-        (set ecx1 eax2)
+        (let v1 v2)
+        (let v3 v4)
+        (let v5 v3)
+        (let v6 v7)
+        (let v8 v6)
         ");
         Ok(())
     }
@@ -347,10 +354,10 @@ mod tests {
         };
         insta::assert_snapshot!(ssa(&code)?, @"
         0:
-        (set ax1 0)
+        (let v1 0)
         1:
-        (set ax2 (phi ax1 ax3))
-        (set ax3 (+ ax2 1))
+        (let v3 (phi v1 v2))
+        (let v2 (+ v3 1))
         (jmp (jmp) 1)
         ");
         Ok(())
@@ -384,21 +391,21 @@ mod tests {
         };
         insta::assert_snapshot!(ssa(&code)?, @"
         0:
-        (set ax1 0)
+        (let v1 0)
         1:
-        (set ax2 (phi ax1 ax4))
-        (test ax2 0)
+        (let v2 (phi v1 v3))
+        (test v2 0)
         (jmp (jne) 2)
         0:
-        (set ax5 ax2)
+        (let v5 v2)
         (cld)
         (jmp (jmp) 3)
         2:
-        (set ax6 ax2)
+        (let v6 v2)
         (cld)
         3:
-        (set ax3 (phi ax5 ax6))
-        (set ax4 (+ ax3 1))
+        (let v4 (phi v5 v6))
+        (let v3 (+ v4 1))
         (jmp (jmp) 1)
         ");
         Ok(())

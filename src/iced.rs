@@ -2,12 +2,12 @@
 //!
 //! Includes the main "x86 opcode to AST statement" logic.
 
-use crate::ast::{Call, Expr, Stmt, StmtKind, Var};
+use crate::ast::{Call, Expr, Name, Stmt, StmtKind};
 
-fn var_from_iced(instr: &iced_x86::Instruction, op: u32) -> Var {
+fn name_from_iced(instr: &iced_x86::Instruction, op: u32) -> Name {
     use iced_x86::OpKind::*;
     match instr.op_kind(op) {
-        Register => Var::new(format!("{:?}", instr.op_register(op)).to_ascii_lowercase()),
+        Register => Name::new(format!("{:?}", instr.op_register(op)).to_ascii_lowercase()),
         k => todo!("{k:?}"),
     }
 }
@@ -59,7 +59,7 @@ impl Expr {
             Immediate32 => Expr::Val(instr.immediate32()),
             NearBranch16 => Expr::Val(instr.near_branch16() as u32),
             NearBranch32 => Expr::Val(instr.near_branch32()),
-            Register => Expr::Var(var_from_iced(instr, op)),
+            Register => Expr::Name(name_from_iced(instr, op)),
             Memory => Self::from_memory(instr),
             k => todo!("{k:?}"),
         }

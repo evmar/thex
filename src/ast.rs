@@ -1,4 +1,18 @@
-pub type Var = smol_str::SmolStr;
+pub type Name = smol_str::SmolStr;
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct Var(pub u16);
+
+impl std::fmt::Display for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v{}", self.0)
+    }
+}
+
+impl Var {
+    pub fn next(self) -> Var {
+        Var(self.0 + 1)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Call {
@@ -20,6 +34,7 @@ impl std::fmt::Display for Call {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
     Val(u32),
+    Name(Name),
     Var(Var),
     Call(Box<Call>),
     Todo(String),
@@ -35,6 +50,7 @@ impl std::fmt::Display for Expr {
                     write!(f, "{val:#x}")
                 }
             }
+            Expr::Name(name) => write!(f, "{name}"),
             Expr::Var(var) => write!(f, "{var}"),
             Expr::Call(op) => write!(f, "{op}"),
             Expr::Todo(msg) => write!(f, "(todo {msg:?})"),
@@ -49,15 +65,21 @@ impl From<u32> for Expr {
 }
 
 impl From<&str> for Expr {
-    fn from(value: &str) -> Self {
-        Expr::Var(Var::new(value))
+    fn from(s: &str) -> Self {
+        Expr::Name(Name::new(s))
     }
 }
 impl From<String> for Expr {
-    fn from(value: String) -> Self {
-        Expr::Var(Var::new(value))
+    fn from(s: String) -> Self {
+        Expr::Name(Name::new(s))
     }
 }
+impl From<Name> for Expr {
+    fn from(name: Name) -> Self {
+        Expr::Name(name)
+    }
+}
+
 impl From<Var> for Expr {
     fn from(var: Var) -> Self {
         Expr::Var(var)
@@ -110,6 +132,7 @@ impl std::fmt::Display for Stmt {
 pub enum StmtKind {
     Do(Expr),
     Set(Expr, Expr),
+    Let(Var, Expr),
     Jmp(Box<Call>, Expr),
     Raw(String),
 }
@@ -118,7 +141,8 @@ impl std::fmt::Display for StmtKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StmtKind::Do(expr) => write!(f, "{expr}"),
-            StmtKind::Set(var, expr) => write!(f, "(set {var} {expr})"),
+            StmtKind::Set(dst, expr) => write!(f, "(set {dst} {expr})"),
+            StmtKind::Let(var, expr) => write!(f, "(let {var} {expr})"),
             StmtKind::Jmp(cond, addr) => write!(f, "(jmp {cond} {addr})"),
             StmtKind::Raw(msg) => write!(f, "(todo {msg:?})"),
         }
@@ -137,11 +161,12 @@ pub fn visit_expr<'a>(expr: &'a Expr, visit: &mut impl FnMut(&'a Expr)) {
 pub fn visit_stmt_expr<'a>(stmt: &'a Stmt, visit: &mut impl FnMut(&'a Expr)) {
     match &stmt.kind {
         StmtKind::Do(expr) => visit_expr(expr, visit),
+        StmtKind::Let(_, val) => {
+            visit_expr(val, visit);
+        }
         StmtKind::Set(dst, val) => {
-            if let Expr::Var(_) = dst {
-            } else {
-                visit_expr(dst, visit);
-            }
+            visit_expr(dst, visit);
+
             visit_expr(val, visit);
         }
         StmtKind::Jmp(cond, dst) => {
@@ -166,11 +191,11 @@ pub fn visit_expr_mut(expr: &mut Expr, visit: &mut impl FnMut(&mut Expr)) {
 pub fn visit_stmt_expr_mut(stmt: &mut Stmt, visit: &mut impl FnMut(&mut Expr)) {
     match &mut stmt.kind {
         StmtKind::Do(expr) => visit_expr_mut(expr, visit),
+        StmtKind::Let(_, val) => {
+            visit_expr_mut(val, visit);
+        }
         StmtKind::Set(dst, val) => {
-            if let Expr::Var(_) = dst {
-            } else {
-                visit_expr_mut(dst, visit);
-            }
+            visit_expr_mut(dst, visit);
             visit_expr_mut(val, visit);
         }
         StmtKind::Jmp(cond, dst) => {

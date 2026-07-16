@@ -1,4 +1,4 @@
-use crate::ast::{Call, Expr, Stmt, StmtKind, Var};
+use crate::ast::{Call, Expr, Name, Stmt, StmtKind, Var};
 
 pub type It<'a> = std::iter::Peekable<std::str::Chars<'a>>;
 
@@ -28,7 +28,7 @@ impl Parse for u32 {
     }
 }
 
-impl Parse for Var {
+impl Parse for Name {
     fn parse_it(it: &mut It) -> Option<Self> {
         let mut buf = String::new();
         while let Some(&c) = it.peek() {
@@ -39,7 +39,7 @@ impl Parse for Var {
             it.next();
         }
         assert!(!buf.is_empty());
-        Some(Var::new(buf))
+        Some(Name::new(buf))
     }
 }
 
@@ -66,7 +66,7 @@ impl Parse for Call {
             whitespace(it)?;
         }
 
-        let Expr::Var(func) = args.remove(0) else {
+        let Expr::Name(func) = args.remove(0) else {
             panic!()
         };
         Some(Call {
@@ -81,7 +81,7 @@ impl Parse for Expr {
         Some(match *it.peek()? {
             '0'..'9' => Expr::Val(<u32>::parse_it(it)?),
             '(' => Expr::Call(Box::new(<Call>::parse_it(it)?)),
-            c if is_ident_char(c) => Expr::Var(<Var>::parse_it(it)?),
+            c if is_ident_char(c) => Expr::Name(<Name>::parse_it(it)?),
             _ => return None,
         })
     }
@@ -100,6 +100,13 @@ impl Parse for Stmt {
         let Expr::Call(call) = &expr else { panic!() };
         let Call { func, args } = &**call;
         let kind = match func.as_str() {
+            "let" => {
+                let [a, b] = args.clone().try_into().unwrap();
+                let Expr::Name(name) = a else { panic!() };
+                assert!(name.starts_with("v"));
+                let var = Var(name[1..].parse().unwrap());
+                StmtKind::Let(var, b)
+            }
             "set" => {
                 let [a, b] = args.clone().try_into().unwrap();
                 StmtKind::Set(a, b)
