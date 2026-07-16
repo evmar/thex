@@ -79,6 +79,9 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
                         if let Some(new) = simp::math_constants(expr) {
                             *expr = new;
                         }
+                        if let Some(new) = simp::phi(expr) {
+                            *expr = new;
+                        }
                     });
                     stmt.ip.splice(0..0, ip.clone());
                 }
@@ -140,7 +143,7 @@ mod tests {
         (use x1)
 
         3:
-        (use (phi x1 x1))
+        (use x1)
         ");
     }
 }

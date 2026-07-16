@@ -39,6 +39,42 @@ pub fn math_constants(expr: &Expr) -> Option<Expr> {
     Some(expr)
 }
 
+/// Simplify (phi x x y) to (phi x y), and (phi x x) to x.
+pub fn phi(expr: &Expr) -> Option<Expr> {
+    let Expr::Call(call) = expr else { return None };
+    let "phi" = call.func.as_str() else {
+        return None;
+    };
+
+    let mut filtered = false;
+    let mut args: Vec<&Expr> = vec![];
+    for arg in call.args.iter() {
+        if let Expr::Var(_) = arg {
+            if args.contains(&arg) {
+                filtered = true;
+                continue;
+            }
+        }
+        args.push(arg);
+    }
+    if !filtered {
+        return None;
+    }
+    let mut args: Vec<Expr> = args.into_iter().cloned().collect();
+
+    if args.len() == 1 {
+        Some(args.pop().unwrap())
+    } else {
+        Some(
+            Call {
+                func: "phi".into(),
+                args,
+            }
+            .into(),
+        )
+    }
+}
+
 /// Simplify `xor eax, eax` => setting eax to 0.
 fn xor(stmt: &StmtKind) -> Option<StmtKind> {
     let StmtKind::Set(left, Expr::Call(call)) = stmt else {
