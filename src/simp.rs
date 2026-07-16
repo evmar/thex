@@ -1,7 +1,7 @@
-use crate::ast::{Call, Expr, Stmt, StmtKind};
+use crate::ast::{Call, Expr, Stmt, StmtKind, visit_stmt_expr_mut};
 
 /// Simplify a series of adds or subs with constants.
-pub fn math_constants(expr: &Expr) -> Option<Expr> {
+pub fn math_constants(in_expr: &mut Expr) -> bool {
     fn constant(expr: &Expr) -> Option<(&Expr, i32)> {
         let Expr::Call(call) = expr else {
             return None;
@@ -18,8 +18,12 @@ pub fn math_constants(expr: &Expr) -> Option<Expr> {
         Some((left, *val as i32 * sign))
     }
 
-    let (expr, c1) = constant(expr)?;
-    let (expr, c2) = constant(expr)?;
+    let Some((expr, c1)) = constant(in_expr) else {
+        return false;
+    };
+    let Some((expr, c2)) = constant(expr) else {
+        return false;
+    };
     let reduced = c1 + c2;
     let expr = if reduced > 0 {
         Call {
@@ -36,14 +40,15 @@ pub fn math_constants(expr: &Expr) -> Option<Expr> {
     } else {
         expr.clone()
     };
-    Some(expr)
+    *in_expr = expr;
+    true
 }
 
 /// Simplify (phi x x y) to (phi x y), and (phi x x) to x.
-pub fn phi(expr: &Expr) -> Option<Expr> {
-    let Expr::Call(call) = expr else { return None };
+pub fn phi(expr: &mut Expr) -> bool {
+    let Expr::Call(call) = expr else { return false };
     let "phi" = call.func.as_str() else {
-        return None;
+        return false;
     };
 
     let mut filtered = false;
@@ -58,60 +63,88 @@ pub fn phi(expr: &Expr) -> Option<Expr> {
         args.push(arg);
     }
     if !filtered {
-        return None;
+        return false;
     }
-    let mut args: Vec<Expr> = args.into_iter().cloned().collect();
 
     if args.len() == 1 {
-        Some(args.pop().unwrap())
+        *expr = args.pop().unwrap().clone();
     } else {
-        Some(
-            Call {
-                func: "phi".into(),
-                args,
-            }
-            .into(),
-        )
+        *expr = Call {
+            func: "phi".into(),
+            args: args.into_iter().cloned().collect(),
+        }
+        .into();
     }
+    true
+}
+
+pub fn simp_expr(expr: &mut Expr) -> bool {
+    for func in &[math_constants, phi] {
+        if func(expr) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Simplify `xor eax, eax` => setting eax to 0.
-fn xor(stmt: &StmtKind) -> Option<StmtKind> {
+fn xor(stmt: &mut StmtKind) -> bool {
     let StmtKind::Set(left, Expr::Call(call)) = stmt else {
-        return None;
+        return false;
     };
-    let "^" = call.func.as_str() else { return None };
+    let "^" = call.func.as_str() else {
+        return false;
+    };
     let [arg1, arg2] = call.args.as_slice() else {
-        return None;
+        return false;
     };
     if left != arg1 || left != arg2 {
-        return None;
+        return false;
     }
-    Some(StmtKind::Set(left.clone(), 0.into()))
+    *stmt = StmtKind::Set(left.clone(), 0.into());
+    true
 }
 
 /// Simplify (test x x) to (cmp x 0).
 /// https://stackoverflow.com/questions/39556649/in-x86-whats-difference-between-test-eax-eax-and-cmp-eax-0
-fn test_to_cmp(stmt: &StmtKind) -> Option<StmtKind> {
+fn test_to_cmp(stmt: &mut StmtKind) -> bool {
     let StmtKind::Do(Expr::Call(call)) = stmt else {
-        return None;
+        return false;
     };
     let "test" = call.func.as_str() else {
-        return None;
+        return false;
     };
     let [arg1, arg2] = call.args.as_slice() else {
-        return None;
+        return false;
     };
     if arg1 != arg2 {
-        return None;
+        return false;
     }
-    Some(StmtKind::Do(
+
+    *stmt = StmtKind::Do(
         Call {
             func: "cmp".into(),
             args: vec![arg1.clone(), 0.into()],
         }
         .into(),
-    ))
+    );
+    true
+}
+
+pub fn simp_stmt(stmt: &mut Stmt) -> bool {
+    for func in &[xor, test_to_cmp] {
+        if func(&mut stmt.kind) {
+            return true;
+        }
+    }
+
+    let mut changed = false;
+    visit_stmt_expr_mut(stmt, &mut |expr| {
+        if simp_expr(expr) {
+            changed = true;
+        }
+    });
+    changed
 }
 
 /// Simplify a cmp followed by conditional jmp.
@@ -157,17 +190,14 @@ pub fn simp(stmts: Vec<Stmt>) -> Vec<Stmt> {
     let mut stmts = stmts;
     let mut i = 0;
     'stmt_loop: while i < stmts.len() {
-        let stmt = &stmts[i].kind;
-        for func in &[xor, test_to_cmp] {
-            if let Some(s) = func(&stmt) {
-                stmts[i].kind = s;
-                continue 'stmt_loop;
-            }
+        if simp_stmt(&mut stmts[i]) {
+            continue 'stmt_loop;
         }
 
         if i + 1 < stmts.len() {
+            let stmt = &stmts[i].kind;
             let next = &stmts[i + 1].kind;
-            if let Some(s) = cmp_jmp((&stmt, &next)) {
+            if let Some(s) = cmp_jmp((stmt, &next)) {
                 stmts[i].kind = s;
                 let next = stmts.remove(i + 1);
                 stmts[i].ip.extend(next.ip);

@@ -38,7 +38,7 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
         }
     }
 
-    let inlined = !to_inline.is_empty();
+    let mut changed = false;
     for inline_var in to_inline {
         // Find the statement that defines this variable and remove it.
         let stmt = blocks
@@ -50,6 +50,7 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
                     };
                     *var == inline_var
                 })?;
+                changed = true;
                 Some(block.stmts.remove(i))
             })
             .unwrap();
@@ -75,21 +76,16 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
                     }
                 });
                 if inlined {
-                    visit_stmt_expr_mut(stmt, &mut |expr| {
-                        if let Some(new) = simp::math_constants(expr) {
-                            *expr = new;
-                        }
-                        if let Some(new) = simp::phi(expr) {
-                            *expr = new;
-                        }
-                    });
+                    if simp::simp_stmt(stmt) {
+                        changed = true;
+                    }
                     stmt.ip.extend(ip.clone());
                     stmt.ip.sort();
                 }
             }
         }
     }
-    inlined
+    changed
 }
 
 pub fn inline(blocks: &mut [Block]) {
