@@ -76,18 +76,9 @@ fn phi_expr(expr: &mut Expr) -> bool {
     true
 }
 
-fn simp_expr(expr: &mut Expr) -> bool {
-    for func in &[math_constants, phi_expr] {
-        if func(expr) {
-            return true;
-        }
-    }
-    false
-}
-
 /// Simplify `xor eax, eax` => setting eax to 0.
-fn xor(stmt: &mut StmtKind) -> bool {
-    let StmtKind::Set(left, Expr::Call(call)) = stmt else {
+fn xor(expr: &mut Expr) -> bool {
+    let Expr::Call(call) = expr else {
         return false;
     };
     let "^" = call.func.as_str() else {
@@ -96,11 +87,20 @@ fn xor(stmt: &mut StmtKind) -> bool {
     let [arg1, arg2] = call.args.as_slice() else {
         return false;
     };
-    if left != arg1 || left != arg2 {
+    if arg1 != arg2 {
         return false;
     }
-    *stmt = StmtKind::Set(left.clone(), 0.into());
+    *expr = 0.into();
     true
+}
+
+fn simp_expr(expr: &mut Expr) -> bool {
+    for func in &[math_constants, phi_expr, xor] {
+        if func(expr) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Simplify (test x x) to (cmp x 0).
@@ -150,7 +150,7 @@ fn simp_let_phi(stmt: &mut StmtKind) -> bool {
 }
 
 pub fn simp_stmt(stmt: &mut Stmt) -> bool {
-    for func in &[xor, test_to_cmp, simp_let_phi] {
+    for func in &[test_to_cmp, simp_let_phi] {
         if func(&mut stmt.kind) {
             return true;
         }

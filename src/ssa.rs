@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::ast::{Call, Expr, Name, Stmt, StmtKind, Var, visit_stmt_expr_mut};
+use crate::{
+    ast::{Call, Expr, Name, Stmt, StmtKind, Var, visit_stmt_expr_mut},
+    simp::simp_stmt,
+};
 
 #[derive(Debug)]
 pub struct Block {
@@ -210,7 +213,8 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
             let phi = phis.entry(*var).or_insert_with(Default::default);
             for &prev in block_preds[cur].iter() {
                 let out = block_outs[prev].get(name).unwrap();
-                phi.push(Expr::Var(*out));
+                let new = Expr::Var(*out);
+                phi.push(new);
             }
         }
     }
@@ -232,13 +236,14 @@ pub fn ssa(stmts: Vec<Stmt>) -> Vec<Block> {
                 .into(),
             };
 
-            blocks[cur].stmts.insert(
-                0,
-                Stmt {
-                    ip: vec![],
-                    kind: StmtKind::Let(*new, val),
-                },
-            );
+            let mut stmt = Stmt {
+                ip: vec![],
+                kind: StmtKind::Let(*new, val),
+            };
+            // simplify e.g (let x (phi x y))
+            // this also happens when inlining, but only for statements affected by inlining
+            simp_stmt(&mut stmt);
+            blocks[cur].stmts.insert(0, stmt);
         }
     }
 
