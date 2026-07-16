@@ -108,21 +108,32 @@ mod tests {
     fn inlines_phis() {
         let stmts = Stmt::parse_many(
             "0: (set x 1)
-            (jmp (jmp) 1)
+            (jmp (jne) 2)
             1: (set y x)
             (use y)
-            (jmp (jmp) 1)",
+            (jmp (jmp) 3)
+            2: (set y x)
+            (use y)
+            3: (use x)",
         );
         let mut blocks = crate::ssa::ssa(stmts);
         inline(&mut blocks);
         insta::assert_snapshot!(fmt_blocks(&blocks, false), @"
         0:
-        (jmp (jmp) 1)
+        (set x1 1)
+        (jmp (jne) 2)
 
         1:
-        (set x2 (phi 1 x2))
+        (set x2 x1)
         (use x2)
-        (jmp (jmp) 1)
+        (jmp (jmp) 3)
+
+        2:
+        (set x3 x1)
+        (use x3)
+
+        3:
+        (use (phi x2 x3))
         ");
     }
 }

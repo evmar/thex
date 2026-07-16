@@ -126,7 +126,11 @@ fn ssa_names(block: &mut Block, syms: &mut Syms) -> (HashMap<Var, Var>, HashMap<
 }
 
 fn nexts(blocks: &[Block], block: usize) -> impl Iterator<Item = usize> {
-    let mut fallthrough = Some(block + 1);
+    let mut fallthrough = if block + 1 < blocks.len() {
+        Some(block + 1)
+    } else {
+        None
+    };
 
     let last = blocks[block].stmts.last().unwrap();
     let jmp = if let StmtKind::Jmp(cond, dst) = &last.kind {
