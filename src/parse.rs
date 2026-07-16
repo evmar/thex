@@ -105,7 +105,6 @@ impl Parse for Stmt {
                 StmtKind::Set(a, b)
             }
             "jmp" => {
-                eprintln!("args {:?}", args);
                 let [a, b] = args.clone().try_into().unwrap();
                 let Expr::Call(cond) = a else { panic!() };
                 StmtKind::Jmp(cond, b)

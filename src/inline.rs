@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     ast::{Expr, Stmt, StmtKind, Var, visit_stmt_expr, visit_stmt_expr_mut},
@@ -6,13 +6,13 @@ use crate::{
     ssa::Block,
 };
 
-pub fn inline(blocks: &mut [Block]) {
-    let mut var_defs = HashSet::<&Var>::new();
+pub fn inline_once(blocks: &mut [Block]) -> bool {
+    let mut var_defs = HashMap::<&Var, &Expr>::new();
     let mut var_uses = HashMap::<&Var, usize>::new();
     for block in blocks.iter() {
         for stmt in block.stmts.iter() {
-            if let StmtKind::Set(Expr::Var(var), _) = &stmt.kind {
-                var_defs.insert(var);
+            if let StmtKind::Set(Expr::Var(var), val) = &stmt.kind {
+                var_defs.insert(var, val);
             }
             visit_stmt_expr(stmt, &mut |expr| {
                 let Expr::Var(var) = expr else {
@@ -24,16 +24,21 @@ pub fn inline(blocks: &mut [Block]) {
     }
 
     let mut to_inline = vec![];
-    for var in var_defs {
-        let Some(&count) = var_uses.get(&var) else {
-            eprintln!("BUG: {var} def but not use?");
-            continue;
+    for (var, val) in var_defs {
+        let count = match var_uses.get(&var) {
+            None => {
+                eprintln!("BUG: {var} def but not use?");
+                0
+            }
+            Some(count) => *count,
         };
-        if count == 1 {
+        let is_alias = matches!(val, Expr::Var(_));
+        if count == 1 || is_alias {
             to_inline.push(var.clone());
         }
     }
 
+    let inlined = !to_inline.is_empty();
     for inline_var in to_inline {
         // Find the statement that defines this variable and remove it.
         let stmt = blocks
@@ -57,7 +62,7 @@ pub fn inline(blocks: &mut [Block]) {
             unreachable!()
         };
 
-        'inline_target: for block in blocks.iter_mut() {
+        for block in blocks.iter_mut() {
             for stmt in block.stmts.iter_mut() {
                 let mut inlined = false;
                 visit_stmt_expr_mut(stmt, &mut |expr| {
@@ -75,12 +80,16 @@ pub fn inline(blocks: &mut [Block]) {
                             *expr = new;
                         }
                     });
-                    stmt.ip.splice(0..0, ip);
-                    break 'inline_target;
+                    stmt.ip.splice(0..0, ip.clone());
                 }
             }
         }
     }
+    inlined
+}
+
+pub fn inline(blocks: &mut [Block]) {
+    while inline_once(blocks) {}
 }
 
 #[cfg(test)]
@@ -124,16 +133,14 @@ mod tests {
         (jmp (jne) 2)
 
         1:
-        (set x2 x1)
-        (use x2)
+        (use x1)
         (jmp (jmp) 3)
 
         2:
-        (set x3 x1)
-        (use x3)
+        (use x1)
 
         3:
-        (use (phi x2 x3))
+        (use (phi x1 x1))
         ");
     }
 }
