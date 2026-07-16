@@ -32,7 +32,7 @@ pub fn inline_once(blocks: &mut [Block]) -> bool {
             }
             Some(count) => *count,
         };
-        let is_alias = matches!(val, Expr::Name(_));
+        let is_alias = matches!(val, Expr::Var(_));
         if count == 1 || is_alias {
             to_inline.push(var);
         }
@@ -133,16 +133,48 @@ mod tests {
         (jmp (jne) 2)
 
         1:
-        (let v3 v1)
-        (use v3)
+        (use v1)
         (jmp (jmp) 3)
 
         2:
-        (let v5 v1)
-        (use v5)
+        (use v1)
 
         3:
-        (use (phi v3 v5))
+        (use v1)
+        ");
+    }
+
+    #[test]
+    fn inlines_across_blocks() {
+        let stmts = Stmt::parse_many(
+            "0: (set x 1)
+            (jmp (jmp) 1)
+            1: (set y 2)
+            (use y)
+            (jmp (jmp) 2)
+            2: (set y 3)
+            (use y)
+            (jmp (jmp) 3)
+            3: (use x)
+            (jmp (jmp) 1)",
+        );
+        let mut blocks = crate::ssa::ssa(stmts);
+        inline(&mut blocks);
+        insta::assert_snapshot!(fmt_blocks(&blocks, false), @"
+        0:
+        (jmp (jmp) 1)
+
+        1:
+        (use 2)
+        (jmp (jmp) 2)
+
+        2:
+        (use 3)
+        (jmp (jmp) 3)
+
+        3:
+        (use 1)
+        (jmp (jmp) 1)
         ");
     }
 }

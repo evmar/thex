@@ -1,7 +1,7 @@
 use crate::ast::{Call, Expr, Stmt, StmtKind, visit_stmt_expr_mut};
 
 /// Simplify a series of adds or subs with constants.
-pub fn math_constants(in_expr: &mut Expr) -> bool {
+fn math_constants(in_expr: &mut Expr) -> bool {
     fn constant(expr: &Expr) -> Option<(&Expr, i32)> {
         let Expr::Call(call) = expr else {
             return None;
@@ -45,30 +45,28 @@ pub fn math_constants(in_expr: &mut Expr) -> bool {
 }
 
 /// Simplify (phi x x y) to (phi x y), and (phi x x) to x.
-pub fn phi(expr: &mut Expr) -> bool {
+fn phi_expr(expr: &mut Expr) -> bool {
     let Expr::Call(call) = expr else { return false };
     let "phi" = call.func.as_str() else {
         return false;
     };
 
-    let mut filtered = false;
     let mut args: Vec<&Expr> = vec![];
     for arg in call.args.iter() {
         if let Expr::Var(_) = arg {
             if args.contains(&arg) {
-                filtered = true;
                 continue;
             }
         }
         args.push(arg);
     }
-    if !filtered {
-        return false;
-    }
 
     if args.len() == 1 {
         *expr = args.pop().unwrap().clone();
     } else {
+        if args.len() == call.args.len() {
+            return false;
+        }
         *expr = Call {
             func: "phi".into(),
             args: args.into_iter().cloned().collect(),
@@ -78,8 +76,8 @@ pub fn phi(expr: &mut Expr) -> bool {
     true
 }
 
-pub fn simp_expr(expr: &mut Expr) -> bool {
-    for func in &[math_constants, phi] {
+fn simp_expr(expr: &mut Expr) -> bool {
+    for func in &[math_constants, phi_expr] {
         if func(expr) {
             return true;
         }
@@ -131,8 +129,28 @@ fn test_to_cmp(stmt: &mut StmtKind) -> bool {
     true
 }
 
+/// Simplify (let v3 (phi ... v3))
+/// this can occur when a block reads some input value and loops back on itself.
+fn simp_let_phi(stmt: &mut StmtKind) -> bool {
+    let StmtKind::Let(var, Expr::Call(call)) = stmt else {
+        return false;
+    };
+    let "phi" = call.func.as_str() else {
+        return false;
+    };
+
+    let m = Expr::Var(*var);
+    let args: Vec<_> = call.args.iter().filter(|a| **a != m).collect();
+    if args.len() != call.args.len() {
+        call.args = args.into_iter().cloned().collect();
+        true
+    } else {
+        false
+    }
+}
+
 pub fn simp_stmt(stmt: &mut Stmt) -> bool {
-    for func in &[xor, test_to_cmp] {
+    for func in &[xor, test_to_cmp, simp_let_phi] {
         if func(&mut stmt.kind) {
             return true;
         }
