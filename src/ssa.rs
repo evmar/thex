@@ -12,17 +12,27 @@ impl std::fmt::Display for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:x}:", self.ip)?;
         for s in self.stmts.iter() {
-            writeln!(f, "{}", s)?;
+            if f.alternate() {
+                writeln!(f, "{:#}", s)?;
+            } else {
+                writeln!(f, "{}", s)?;
+            }
         }
         Ok(())
     }
 }
 
 #[cfg(test)]
-pub fn fmt_blocks(blocks: &[Block]) -> String {
+pub fn fmt_blocks(blocks: &[Block], include_ip: bool) -> String {
     blocks
         .iter()
-        .map(|b| format!("{:#}", b))
+        .map(|b| {
+            if include_ip {
+                format!("{b:#}")
+            } else {
+                format!("{b}")
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }

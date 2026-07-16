@@ -91,14 +91,16 @@ pub struct Stmt {
 
 impl std::fmt::Display for Stmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, ip) in self.ip.iter().enumerate() {
-            if i > 0 {
-                write!(f, ",")?;
+        if f.alternate() {
+            for (i, ip) in self.ip.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{ip:08x}")?;
             }
-            write!(f, "{ip:08x}")?;
-        }
-        if self.ip.len() > 0 {
-            write!(f, " ")?;
+            if self.ip.len() > 0 {
+                write!(f, " ")?;
+            }
         }
         write!(f, "{}", self.kind)
     }

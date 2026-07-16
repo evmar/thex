@@ -98,7 +98,10 @@ mod tests {
 
         inline(&mut blocks);
 
-        insta::assert_snapshot!(fmt_blocks(&blocks), @"00000001,00000002 (foo 1)");
+        insta::assert_snapshot!(fmt_blocks(&blocks, true), @"
+        1:
+        00000001,00000002 (foo 1)
+        ");
     }
 
     #[test]
@@ -112,11 +115,13 @@ mod tests {
         );
         let mut blocks = crate::ssa::ssa(stmts);
         inline(&mut blocks);
-        insta::assert_snapshot!(fmt_blocks(&blocks), @"
+        insta::assert_snapshot!(fmt_blocks(&blocks, false), @"
+        0:
         (jmp (jmp) 1)
 
-        00000000 (set x2 (phi 1 x2))
-        00000001 (use x2)
+        1:
+        (set x2 (phi 1 x2))
+        (use x2)
         (jmp (jmp) 1)
         ");
     }
